@@ -1,4 +1,5 @@
 from threading import Event
+from time import monotonic
 
 from textual import events, on, work
 from textual.app import App, ComposeResult
@@ -30,6 +31,7 @@ class ForgeApp(App[None]):
         self.session_name = ""
         self._approval_decision: Event | None = None
         self._busy = False
+        self._agent_started_at: float | None = None
         if runtime is not None:
             runtime.agent.presenter = self
 
@@ -191,10 +193,21 @@ class ForgeApp(App[None]):
         self.call_from_thread(self._refresh_sidebar)
 
     def step_started(self, step: int, maximum: int) -> None:
-        self.call_from_thread(
-            self.query_one("#activity-row", ActivityProgress).set_phase,
-            f"Thinking (pass {step})",
-        )
+        now = monotonic()
+        if self._agent_started_at is None:
+            self._agent_started_at = now
+        elapsed = now - self._agent_started_at
+        if step > 1 and elapsed > 0:
+            remaining = (elapsed / (step - 1)) * (maximum - step + 1)
+            self.call_from_thread(
+                self.query_one("#activity-row", ActivityProgress).set_phase,
+                f"Thinking (pass {step}/{maximum}) · EFT {remaining:.0f}s",
+            )
+        else:
+            self.call_from_thread(
+                self.query_one("#activity-row", ActivityProgress).set_phase,
+                f"Thinking (pass {step}/{maximum})",
+            )
 
     def tool_started(self, name: str, arguments: str) -> None:
         self.call_from_thread(
@@ -264,7 +277,9 @@ class ForgeApp(App[None]):
         composer.disabled = busy
         composer.placeholder = "Forge is working" if busy else "Ask Forge or enter /help"
         if busy:
+            self._agent_started_at = None
             activity.set_working(label)
             return
+        self._agent_started_at = None
         activity.set_done()
         composer.focus()
