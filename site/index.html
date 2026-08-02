@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forge — Multi-provider terminal AI coding agent</title>
+  <meta name="description" content="Forge is a workflow-first terminal AI coding agent. Connect your providers, inspect repositories, delegate tasks, and ship stronger software.">
+  <meta property="og:title" content="Forge — Shape code. Temper bugs. Ship stronger software.">
+  <meta property="og:description" content="Workflow-first terminal AI coding agent with provider independence, trust-by-evidence, and safe delegation.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://chenboda01.github.io/Forge-AI/">
+  <meta name="twitter:card" content="summary">
+  <link rel="canonical" href="https://chenboda01.github.io/Forge-AI/">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="site.js" defer></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+
+  <header role="banner">
+    <nav aria-label="Site">
+      <span class="logo" aria-hidden="true">&#x2692;</span>
+      <span class="brand">Forge</span>
+    </nav>
+  </header>
+
+  <main id="main-content">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-badge">v0.2.1 · Development</div>
+      <h1 class="hero-title">Shape code.<br>Temper bugs.<br>Ship stronger software.</h1>
+      <p class="hero-sub">
+        Forge is a workflow-first terminal AI coding agent.
+        Connect your providers, inspect repositories, delegate tasks to read-only subagents, and let Forge propose evidence-backed patches.
+        Every destructive action requires human approval.
+      </p>
+      <div class="hero-actions">
+        <a href="#install" class="btn-primary">Install Forge</a>
+        <a href="https://github.com/Chenboda01/Forge-AI" class="btn-secondary">View on GitHub</a>
+      </div>
+    </section>
+
+    <!-- Product Preview -->
+    <section class="preview">
+      <div class="terminal-window" aria-label="Forge terminal interface preview" role="img">
+        <div class="terminal-bar">
+          <span class="terminal-dot" aria-hidden="true"></span>
+          <span class="terminal-dot" aria-hidden="true"></span>
+          <span class="terminal-dot" aria-hidden="true"></span>
+          <span class="terminal-title">Forge — DeepSeek Chat</span>
+        </div>
+        <pre class="terminal-content">
+<span class="t-dim">~/Projects/app   main   BUILD   DeepSeek Chat</span>
+
+<span class="t-forge">Forge</span>
+<span class="t-dim">Shape code. Temper bugs. Ship stronger software.</span>
+<span class="t-dim">Enter /help for commands.</span>
+
+<span class="t-you">you</span> Add provider health checks and tests.
+
+<span class="t-forge">Forge</span> <span class="t-dim">I'll inspect provider configuration first.</span>
+
+<span class="t-agent">◇ Explore · running</span>
+<span class="t-dim">  Searching provider initialization…</span>
+<span class="t-dim">  Read 4 files · 1,284 tokens</span>
+
+<span class="t-agent">✓ Read forge_core/provider.py</span>
+<span class="t-agent">✓ Read forge_core/config.py</span>
+<span class="t-agent">◇ Delegated provider analysis</span>
+
+<span class="t-status">2 agents · 7 tool calls · 8.4k tokens</span>
+
+<span class="t-prompt">> </span><span class="t-cursor">&#x2588;</span></pre>
+      </div>
+    </section>
+
+    <!-- Installation -->
+    <section id="install">
+      <h2>Install Forge</h2>
+
+      <h3>Prerequisites</h3>
+      <ul>
+        <li>Python 3.12 or newer</li>
+        <li>Git</li>
+        <li>An API key from one of the supported providers (DeepSeek, OpenAI, Anthropic, Google, Groq, Mistral, OpenRouter, or Ollama for local models)</li>
+      </ul>
+
+      <h3>Clone and set up</h3>
+      <div class="code-block">
+        <code>
+<span class="c-prompt">$</span> git clone https://github.com/Chenboda01/Forge-AI.git
+<span class="c-prompt">$</span> cd Forge-AI
+<span class="c-prompt">$</span> python -m venv .venv
+<span class="c-prompt">$</span> .venv/bin/pip install -e .
+        </code>
+      </div>
+
+      <h3>Configure providers</h3>
+      <p>Create a <code>.env</code> file with your API keys:</p>
+      <div class="code-block">
+        <code>
+<span class="c-dim"># .env</span>
+DEEPSEEK_API_KEY=sk-your-deepseek-key
+OPENAI_API_KEY=sk-your-openai-key
+ANTHROPIC_API_KEY=sk-your-anthropic-key
+GEMINI_API_KEY=your-gemini-key
+OPENROUTER_API_KEY=sk-your-openrouter-key
+GROQ_API_KEY=gsk-your-groq-key
+MISTRAL_API_KEY=your-mistral-key
+        </code>
+      </div>
+
+      <h3>Launch Forge</h3>
+      <div class="code-block">
+        <code>
+<span class="c-prompt">$</span> forge
+        </code>
+      </div>
+      <p>Or select a specific model:</p>
+      <div class="code-block">
+        <code>
+<span class="c-prompt">$</span> forge            <span class="c-dim"># Uses FORGE_MODEL or Ollama default</span>
+        </code>
+      </div>
+    </section>
+
+    <!-- Workflow -->
+    <section>
+      <h2>How Forge works</h2>
+      <p>Forge is <strong>workflow-first</strong>. The model recommends actions — the workflow engine controls permissions, approvals, limits, and recovery.</p>
+
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="flow-num">1</div>
+          <h3>Understand</h3>
+          <p>Forge inspects your project, reads relevant files, and builds context before proposing any change.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">2</div>
+          <h3>Plan</h3>
+          <p>A structured plan is created. Subagents can be delegated for read-only exploration and review.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">3</div>
+          <h3>Propose</h3>
+          <p>Forge proposes patches. Every destructive action — writes, commands, deletions — requires your approval.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">4</div>
+          <h3>Validate</h3>
+          <p>Tests, lint, type checks, and Git diffs provide evidence. Forge never claims success without proof.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Capabilities -->
+    <section>
+      <h2>What Forge can do</h2>
+
+      <div class="cap-grid">
+        <div class="cap-card">
+          <h3>Multi-provider</h3>
+          <p>DeepSeek, OpenAI, Anthropic, Google, Groq, Mistral, OpenRouter, and Ollama. Switch models mid-session with <code>/model</code>.</p>
+          <span class="cap-evidence">104 tests</span>
+        </div>
+        <div class="cap-card">
+          <h3>Workspace safety</h3>
+          <p>All file access is confined to the project root. Paths that attempt to escape the workspace are blocked.</p>
+          <span class="cap-evidence">test_workspace.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Read-only subagents</h3>
+          <p>Delegate exploration and review to specialized subagents. They receive only read-only tools and report back with evidence.</p>
+          <span class="cap-evidence">test_subagents.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Trusted approval</h3>
+          <p>Every destructive tool — write, patch, command, delete — opens a modal requesting explicit approval. Models cannot approve their own actions.</p>
+          <span class="cap-evidence">test_agent.py, test_tui.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Session management</h3>
+          <p>Conversations are saved, named, and restorable. Secrets are redacted before persistence.</p>
+          <span class="cap-evidence">test_sessions.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Provider normalization</h3>
+          <p>All provider responses are normalized into a single typed interface. Provider-specific behavior stays in the boundary layer.</p>
+          <span class="cap-evidence">test_provider.py</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Commands -->
+    <section>
+      <h2>Terminal commands</h2>
+      <div class="code-block" style="max-width:520px">
+        <code>
+<span class="c-prompt">/help</span>       Show commands
+<span class="c-prompt">/models</span>      List available models
+<span class="c-prompt">/model</span> NAME  Switch the active model
+<span class="c-prompt">/status</span>      Show provider, model, and workspace
+<span class="c-prompt">/usage</span>       Token count and estimated cost
+<span class="c-prompt">/files</span>       List project files
+<span class="c-prompt">/read</span> FILE   Read a UTF-8 text file
+<span class="c-prompt">/tree</span>        Show the project tree
+<span class="c-prompt">/agents</span>      List available subagents
+<span class="c-prompt">/agent</span> NAME  Delegate a task to a subagent
+<span class="c-prompt">/sessions</span>    List saved conversations
+<span class="c-prompt">/new</span>         Start a new conversation
+<span class="c-prompt">/compact</span>     Reduce context when it grows
+<span class="c-prompt">/updates</span>     Check for Forge updates
+<span class="c-prompt">/clear</span>       Clear the display
+<span class="c-prompt">/exit</span>        Exit Forge
+        </code>
+      </div>
+    </section>
+
+    <!-- Security -->
+    <section>
+      <h2>Security by design</h2>
+      <ul>
+        <li><strong>No automatic fallback.</strong> If a model request fails, Forge reports the error. It never silently switches providers.</li>
+        <li><strong>Secrets redacted.</strong> Environment variables, API keys, and private key files are not sent to cloud providers.</li>
+        <li><strong>Path containment.</strong> Tools cannot read or write outside the project workspace.</li>
+        <li><strong>Approval gating.</strong> Write, command, and delete operations require user approval through a trusted modal.</li>
+        <li><strong>Prompt-injection defense.</strong> Repository content cannot grant permissions or override configured policies.</li>
+        <li><strong>Execution limits.</strong> Step limits, command timeouts, output caps, and delegation depth prevent runaway agents.</li>
+      </ul>
+    </section>
+
+    <!-- Roadmap -->
+    <section>
+      <h2>What's next</h2>
+      <p>Forge is in active development. The current milestone delivers the full Textual interface and slash-command surface. Planned work includes:</p>
+      <ul>
+        <li>Patch preview and approval with structured diffs</li>
+        <li>Automatic checkpoints and undo</li>
+        <li>FORGE.md project instructions</li>
+        <li>Plugin support with declared permissions</li>
+        <li>Language-server integration for accurate code intelligence</li>
+      </ul>
+      <p class="caption">See <a href="https://github.com/Chenboda01/Forge-AI/blob/main/ROADMAP.md">ROADMAP.md</a> for the full plan.</p>
+    </section>
+
+  </main>
+
+  <footer role="contentinfo">
+    <p>Forge v0.2.1 — <a href="https://github.com/Chenboda01/Forge-AI">GitHub</a> — MIT License</p>
+  </footer>
+</body>
+</html>
