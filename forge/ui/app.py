@@ -32,6 +32,8 @@ class ForgeApp(App[None]):
         self._approval_decision: Event | None = None
         self._busy = False
         self._agent_started_at: float | None = None
+        self._agent_max_steps: int = 0
+        self._agent_current_step: int = 0
         if runtime is not None:
             runtime.agent.presenter = self
 
@@ -196,14 +198,8 @@ class ForgeApp(App[None]):
         now = monotonic()
         if self._agent_started_at is None:
             self._agent_started_at = now
-        elapsed = now - self._agent_started_at
-        if step > 1 and elapsed > 0:
-            remaining = (elapsed / (step - 1)) * (maximum - step + 1)
-            self.call_from_thread(
-                self._show_phase, f"Thinking (pass {step}/{maximum}) · EFT {remaining:.0f}s"
-            )
-        else:
-            self.call_from_thread(self._show_phase, f"Thinking (pass {step}/{maximum})")
+        self._agent_current_step = step
+        self._agent_max_steps = maximum
 
     def _show_phase(self, label: str) -> None:
         self.query_one("#activity-row", ActivityProgress).set_phase(label)
@@ -277,8 +273,23 @@ class ForgeApp(App[None]):
         composer.placeholder = "Forge is working" if busy else "Ask Forge or enter /help"
         if busy:
             self._agent_started_at = None
+            self._agent_current_step = 0
+            self._agent_max_steps = 0
             activity.set_working(label)
+            self.set_interval(1.0, self._tick_eft)
             return
         self._agent_started_at = None
         activity.set_done()
+
+    def _tick_eft(self) -> None:
+        if self._agent_started_at is None:
+            return
+        elapsed = monotonic() - self._agent_started_at
+        step = self._agent_current_step
+        maximum = self._agent_max_steps
+        if step > 1 and elapsed > 0.5:
+            remaining = (elapsed / (step - 1)) * (maximum - step + 1)
+            self._show_phase(f"Thinking · step {step}/{maximum} · EFT {remaining:.0f}s")
+        elif step > 0:
+            self._show_phase(f"Thinking · step {step}/{maximum} · {elapsed:.0f}s")
         composer.focus()
