@@ -200,14 +200,13 @@ class ForgeApp(App[None]):
         if step > 1 and elapsed > 0:
             remaining = (elapsed / (step - 1)) * (maximum - step + 1)
             self.call_from_thread(
-                self.query_one("#activity-row", ActivityProgress).set_phase,
-                f"Thinking (pass {step}/{maximum}) · EFT {remaining:.0f}s",
+                self._show_phase, f"Thinking (pass {step}/{maximum}) · EFT {remaining:.0f}s"
             )
         else:
-            self.call_from_thread(
-                self.query_one("#activity-row", ActivityProgress).set_phase,
-                f"Thinking (pass {step}/{maximum})",
-            )
+            self.call_from_thread(self._show_phase, f"Thinking (pass {step}/{maximum})")
+
+    def _show_phase(self, label: str) -> None:
+        self.query_one("#activity-row", ActivityProgress).set_phase(label)
 
     def tool_started(self, name: str, arguments: str) -> None:
         self.call_from_thread(
