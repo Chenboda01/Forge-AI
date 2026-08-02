@@ -79,6 +79,6 @@ async def request_interrupt(app: ForgeApp) -> None:
     app.query_one("#activity-row", ActivityProgress).set_phase("Stopping")
     await app._append_entry(
         "SYSTEM",
-        "Interrupt requested. Waiting for the current operation to stop safely.",
+        "Interrupt requested. Waiting for the current operation to stop safely...",
         "notice",
     )
