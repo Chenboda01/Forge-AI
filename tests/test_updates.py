@@ -1,4 +1,3 @@
-import shutil
 import subprocess
 import sys
 import tomllib
@@ -163,10 +162,11 @@ def test_manifest_network_failure_is_reported(
         fetch_latest_version()
 
 
-def test_reinstall_uses_fixed_versioned_uv_command(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_reinstall_uses_git_source_install_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # Given: an exact registry version approved for installation
     commands: list[tuple[str, ...]] = []
-    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/uv")
 
     def record(
         command: tuple[str, ...], **_options: bool | float
@@ -177,29 +177,33 @@ def test_reinstall_uses_fixed_versioned_uv_command(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(subprocess, "run", record)
 
     # When: the trusted installer boundary executes
-    reinstall_version("0.2.2")
+    reinstall_version("0.2.4")
 
-    # Then: it invokes only the fixed uv tool reinstall shape
-    assert commands == [("uv", "tool", "install", "forge@0.2.2", "--force")]
+    # Then: it installs from the official GitHub repository at the tagged version
+    assert commands == [
+        (
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "git+https://github.com/Chenboda01/Forge-AI.git@v0.2.4",
+        )
+    ]
 
 
-def test_update_uses_running_python_when_uv_is_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Given: Forge has no uv executable but its running Python has pip
-    monkeypatch.setattr(shutil, "which", lambda _name: None)
+def test_update_command_always_uses_git_source() -> None:
+    # Given / When: Forge selects the installer command for any version
+    command = update_command("0.2.4")
 
-    # When: Forge selects the exact installer command for approval
-    command = update_command("0.2.2")
-
-    # Then: the command uses the package manager available through this interpreter
+    # Then: the command installs from the official Git source, never PyPI
     assert command == (
         sys.executable,
         "-m",
         "pip",
         "install",
         "--upgrade",
-        "forge==0.2.2",
+        "git+https://github.com/Chenboda01/Forge-AI.git@v0.2.4",
     )
 
 
@@ -208,5 +212,5 @@ def test_release_version_matches_project_metadata() -> None:
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 
     # When / Then: every maintained version surface identifies this release
-    assert __version__ == "0.2.3"
+    assert __version__ == "0.2.4"
     assert project["project"]["version"] == __version__

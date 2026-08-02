@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import sys
 from collections.abc import Callable
@@ -92,15 +91,13 @@ def fetch_latest_version() -> str:
 
 
 def update_command(latest: str) -> tuple[str, ...]:
-    if shutil.which("uv") is not None:
-        return ("uv", "tool", "install", f"forge@{latest}", "--force")
     return (
         sys.executable,
         "-m",
         "pip",
         "install",
         "--upgrade",
-        f"forge=={latest}",
+        f"git+https://github.com/Chenboda01/Forge-AI.git@v{latest}",
     )
 
 
