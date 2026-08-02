@@ -4,6 +4,7 @@ import shlex
 from typing import TYPE_CHECKING, assert_never
 
 from forge.forge_core.updates import (
+    RELEASE_SOURCE_URL,
     UpdateError,
     UpdateOutcome,
     UpdateService,
@@ -43,6 +44,7 @@ def _run_update(app: ForgeApp) -> None:
 def _approval_details(latest: str) -> str:
     return (
         f"Install Forge {latest}?\n\n"
+        f"Source: {RELEASE_SOURCE_URL}\n"
         f"Command: {shlex.join(update_command(latest))}\n\n"
         "Forge will continue running the current version until restarted."
     )

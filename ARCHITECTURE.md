@@ -477,20 +477,17 @@ class ProviderClient(Protocol):
     def complete(
         self,
         request: CompletionRequest,
-    ) -> CompletionResponse:
-        ...
+    ) -> CompletionResponse: ...
 
     def stream(
         self,
         request: CompletionRequest,
-    ) -> Iterator[CompletionChunk]:
-        ...
+    ) -> Iterator[CompletionChunk]: ...
 
     def test_connection(
         self,
         model: ModelConfig,
-    ) -> ProviderHealth:
-        ...
+    ) -> ProviderHealth: ...
 ```
 
 ### 7.2 Normalized Response

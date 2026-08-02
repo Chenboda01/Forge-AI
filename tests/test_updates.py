@@ -2,10 +2,13 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from io import BytesIO
 from pathlib import Path
+from urllib.error import URLError
 
 import pytest
 
+import forge.forge_core.updates as updates_module
 from forge.forge_core.updates import (
     UpdateError,
     UpdateService,
@@ -108,9 +111,55 @@ def test_invalid_registry_version_is_rejected() -> None:
         coordinate_update(service, lambda _latest: True)
 
 
-def test_default_update_check_rejects_unverified_package_source() -> None:
-    # Given / When / Then: no official Forge release source is configured
-    with pytest.raises(UpdateError, match="official release source"):
+def test_fetch_latest_version_parses_official_manifest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the official release source reports Forge's latest release
+    payload = BytesIO(b'{"forge":{"latest":"0.2.2","releases":"..."}}')
+    monkeypatch.setattr(updates_module, "urlopen", lambda *_args, **_kwargs: payload)
+
+    # When: Forge checks its official release source
+    latest = fetch_latest_version()
+
+    # Then: the exact announced release is returned
+    assert latest == "0.2.2"
+
+
+def test_broken_manifest_json_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a release manifest with broken JSON
+    payload = BytesIO(b"not json")
+    monkeypatch.setattr(updates_module, "urlopen", lambda *_args, **_kwargs: payload)
+
+    # When / Then: Forge rejects the payload before version comparison
+    with pytest.raises(UpdateError, match="manifest"):
+        fetch_latest_version()
+
+
+def test_manifest_missing_forge_key_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: a release manifest missing the forge top-level key
+    payload = BytesIO(b'{"something":"else"}')
+    monkeypatch.setattr(updates_module, "urlopen", lambda *_args, **_kwargs: payload)
+
+    # When / Then: Forge rejects it
+    with pytest.raises(UpdateError, match="manifest"):
+        fetch_latest_version()
+
+
+def test_manifest_network_failure_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the official release source is unreachable
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise URLError("connection refused")
+
+    monkeypatch.setattr(updates_module, "urlopen", fail)
+
+    # When / Then: Forge reports the network error
+    with pytest.raises(UpdateError, match="Could not reach"):
         fetch_latest_version()
 
 

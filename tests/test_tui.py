@@ -113,24 +113,13 @@ async def test_current_update_check_reports_without_approval(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
-async def test_unconfigured_update_source_fails_closed() -> None:
-    # Given: Forge has no configured official release source
-    app = ForgeApp()
+async def test_release_source_url_is_configured() -> None:
+    # Given: the official Forge Pages release source
+    source = updates_core.RELEASE_SOURCE_URL
 
-    async with app.run_test(size=(100, 32)) as pilot:
-        composer = app.query_one("#composer", Input)
-
-        # When: the user requests an update check
-        composer.value = "/updates"
-        await pilot.press("enter")
-        await pilot.pause()
-
-        # Then: Forge reports the blocker without requesting installation approval
-        assert not isinstance(app.screen, ApprovalScreen)
-        assert (
-            "no official release source"
-            in app.query_one("#conversation", ConversationView).transcript
-        )
+    # When: inspecting the update module constant
+    # Then: the exact source URL is wired into the updater
+    assert "chenboda01.github.io/Forge-AI/releases.json" in source
 
 
 @pytest.mark.asyncio
@@ -150,6 +139,7 @@ async def test_approved_update_installs_and_requests_restart(monkeypatch) -> Non
         await pilot.pause()
         assert isinstance(app.screen, ApprovalScreen)
         assert shlex.join(updates_core.update_command("0.2.2")) in app.screen.arguments
+        assert "releases.json" in app.screen.arguments
         await pilot.click("#approve")
         await pilot.pause()
 
