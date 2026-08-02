@@ -1,0 +1,165 @@
+$surface-canvas: #10100f;
+$surface-main: #151513;
+$surface-rail: #1c1b18;
+$surface-elevated: #24221e;
+$text-primary: #f1eadf;
+$text-secondary: #aaa397;
+$text-muted: #6f6a61;
+$border-subtle: #35312b;
+$accent-primary: #e06c3b;
+$accent-active: #f08a54;
+$status-success: #87a96b;
+$status-warning: #d5a94f;
+$status-error: #d9685f;
+$status-info: #6f9fba;
+
+Screen {
+    background: $surface-canvas;
+    color: $text-primary;
+}
+
+#shell {
+    width: 100%;
+    height: 100%;
+    layout: horizontal;
+}
+
+#main {
+    width: 1fr;
+    height: 100%;
+    background: $surface-main;
+}
+
+#conversation {
+    width: 100%;
+    height: 1fr;
+    padding: 2 3;
+    scrollbar-color: $accent-primary;
+    scrollbar-background: $surface-main;
+}
+
+.message {
+    width: 100%;
+    height: auto;
+    margin-bottom: 2;
+    color: $text-primary;
+}
+
+.message-user {
+    border-left: tall $text-secondary;
+    padding-left: 2;
+}
+
+.message-forge {
+    border-left: tall $accent-primary;
+    padding-left: 2;
+}
+
+.message-tool {
+    color: $status-info;
+    padding-left: 2;
+}
+
+.message-error {
+    color: $status-error;
+    border-left: tall $status-error;
+    padding-left: 2;
+}
+
+#composer {
+    width: 100%;
+    height: 3;
+    border: none;
+    border-top: solid $border-subtle;
+    padding: 0 2;
+    background: $surface-main;
+    color: $text-primary;
+}
+
+#activity-row {
+    width: 100%;
+    height: 2;
+    padding: 0 2;
+    background: $surface-main;
+    color: $text-secondary;
+}
+
+#activity-label {
+    width: 22;
+    height: 1;
+}
+
+#agent-progress {
+    width: 1fr;
+    height: 1;
+    color: $accent-primary;
+    background: $surface-elevated;
+}
+
+#composer:focus {
+    border-top: solid $accent-active;
+    background: $surface-elevated;
+}
+
+#sidebar {
+    width: 28;
+    min-width: 24;
+    max-width: 32;
+    height: 100%;
+    padding: 1 2;
+    border-left: solid $border-subtle;
+    background: $surface-rail;
+    color: $text-secondary;
+}
+
+#sidebar-content {
+    width: 100%;
+    height: auto;
+}
+
+#sidebar-spacer {
+    width: 100%;
+    height: 1fr;
+}
+
+#sidebar-footer {
+    width: 100%;
+    height: auto;
+    color: $text-muted;
+}
+
+ApprovalScreen {
+    align: center middle;
+    background: $surface-canvas 70%;
+}
+
+#approval-dialog {
+    width: 64;
+    max-width: 90%;
+    height: auto;
+    padding: 2;
+    background: $surface-elevated;
+    border: solid $accent-primary;
+}
+
+#approval-title {
+    height: 2;
+    color: $accent-active;
+    text-style: bold;
+}
+
+#approval-body {
+    height: auto;
+    max-height: 16;
+    color: $text-primary;
+}
+
+#approval-actions {
+    height: 3;
+    align-horizontal: right;
+    margin-top: 1;
+}
+
+#approval-actions Button {
+    margin-left: 1;
+}
