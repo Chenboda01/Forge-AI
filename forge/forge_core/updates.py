@@ -16,7 +16,10 @@ from packaging.version import InvalidVersion, Version
 
 from forge.version import __version__
 
-RELEASE_SOURCE_URL: Final = "https://chenboda01.github.io/Forge-AI/releases.json"
+RELEASE_SOURCE_URL: Final = (
+    "https://raw.githubusercontent.com/Chenboda01/Forge-AI/main/site/releases.json"
+)
+RELEASE_SOURCE_FALLBACK: Final = "https://chenboda01.github.io/Forge-AI/releases.json"
 UPDATE_TIMEOUT_SECONDS: Final = 120.0
 
 
@@ -68,15 +71,20 @@ class UpdateService:
 
 
 def fetch_latest_version() -> str:
-    request = Request(RELEASE_SOURCE_URL, headers={"Accept": "application/json"})
-    try:
-        with urlopen(request, timeout=10.0) as response:  # noqa: S310 - fixed HTTPS URL
-            payload = json.loads(response.read())
-        latest = payload["forge"]["latest"]
-    except (JSONDecodeError, KeyError, TypeError) as error:
-        raise UpdateError(f"The release manifest is malformed: {error}") from error
-    except (URLError, TimeoutError) as error:
-        raise UpdateError(f"Could not reach the Forge release source: {error}") from error
+    latest: object = None
+    for attempt, url in enumerate((RELEASE_SOURCE_URL, RELEASE_SOURCE_FALLBACK), start=1):
+        request = Request(url, headers={"Accept": "application/json"})
+        try:
+            with urlopen(request, timeout=10.0) as response:  # noqa: S310 - fixed HTTPS URL
+                payload = json.loads(response.read())
+            latest = payload["forge"]["latest"]
+            break
+        except (JSONDecodeError, KeyError, TypeError) as error:
+            raise UpdateError(f"The release manifest is malformed: {error}") from error
+        except (URLError, TimeoutError) as error:
+            if attempt == 2:
+                raise UpdateError(f"Could not reach the Forge release source: {error}") from error
+            continue
 
     if not isinstance(latest, str):
         raise UpdateError("The Forge release source returned a non-text version.")

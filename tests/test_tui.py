@@ -114,12 +114,14 @@ async def test_current_update_check_reports_without_approval(monkeypatch) -> Non
 
 @pytest.mark.asyncio
 async def test_release_source_url_is_configured() -> None:
-    # Given: the official Forge Pages release source
-    source = updates_core.RELEASE_SOURCE_URL
+    # Given: the official Forge release source and Pages fallback
+    primary = updates_core.RELEASE_SOURCE_URL
+    fallback = updates_core.RELEASE_SOURCE_FALLBACK
 
-    # When: inspecting the update module constant
-    # Then: the exact source URL is wired into the updater
-    assert "chenboda01.github.io/Forge-AI/releases.json" in source
+    # When: inspecting the update module constants
+    # Then: both the raw source and Pages fallback are wired in
+    assert "raw.githubusercontent.com/Chenboda01/Forge-AI" in primary
+    assert "chenboda01.github.io/Forge-AI/releases.json" in fallback
 
 
 @pytest.mark.asyncio
