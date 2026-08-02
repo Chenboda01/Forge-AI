@@ -208,5 +208,5 @@ def test_release_version_matches_project_metadata() -> None:
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
 
     # When / Then: every maintained version surface identifies this release
-    assert __version__ == "0.2.1"
+    assert __version__ == "0.2.3"
     assert project["project"]["version"] == __version__
