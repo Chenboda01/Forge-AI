@@ -1,0 +1,163 @@
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+import pytest
+
+from forge.forge_core.updates import (
+    UpdateError,
+    UpdateService,
+    UpdateStatus,
+    coordinate_update,
+    fetch_latest_version,
+    reinstall_version,
+    update_command,
+)
+from forge.version import __version__
+
+
+class UpdateRecorder:
+    def __init__(self, latest: str) -> None:
+        self.latest = latest
+        self.approvals: list[str] = []
+        self.installs: list[str] = []
+
+    def fetch_latest(self) -> str:
+        return self.latest
+
+    def approve(self, latest: str) -> bool:
+        self.approvals.append(latest)
+        return True
+
+    def deny(self, latest: str) -> bool:
+        self.approvals.append(latest)
+        return False
+
+    def reinstall(self, latest: str) -> None:
+        self.installs.append(latest)
+
+
+def make_service(recorder: UpdateRecorder) -> UpdateService:
+    return UpdateService("0.2.1", recorder.fetch_latest, recorder.reinstall)
+
+
+def test_current_version_does_nothing_without_approval() -> None:
+    # Given: the registry reports the installed release
+    recorder = UpdateRecorder("0.2.1")
+
+    # When: Forge coordinates an update check
+    outcome = coordinate_update(make_service(recorder), recorder.approve)
+
+    # Then: neither approval nor reinstallation is attempted
+    assert outcome.status is UpdateStatus.CURRENT
+    assert recorder.approvals == []
+    assert recorder.installs == []
+
+
+def test_outdated_version_requires_approval_before_reinstall() -> None:
+    # Given: the registry reports a newer release
+    recorder = UpdateRecorder("0.2.2")
+
+    # When: the trusted interface denies the exact update
+    outcome = coordinate_update(make_service(recorder), recorder.deny)
+
+    # Then: Forge records denial without changing the installation
+    assert outcome.status is UpdateStatus.DENIED
+    assert recorder.approvals == ["0.2.2"]
+    assert recorder.installs == []
+
+
+def test_approved_outdated_version_reinstalls_latest_release() -> None:
+    # Given: a newer release and trusted approval
+    recorder = UpdateRecorder("0.2.2")
+
+    # When: Forge coordinates the update
+    outcome = coordinate_update(make_service(recorder), recorder.approve)
+
+    # Then: the exact registry release is reinstalled once
+    assert outcome.status is UpdateStatus.UPDATED
+    assert recorder.approvals == ["0.2.2"]
+    assert recorder.installs == ["0.2.2"]
+
+
+def test_update_failure_is_reported_without_success_status() -> None:
+    # Given: an approved update whose installer fails
+    recorder = UpdateRecorder("0.2.2")
+
+    def fail(_latest: str) -> None:
+        raise UpdateError("installer failed")
+
+    service = UpdateService("0.2.1", recorder.fetch_latest, fail)
+
+    # When / Then: the failure propagates instead of becoming an updated outcome
+    with pytest.raises(UpdateError, match="installer failed"):
+        coordinate_update(service, recorder.approve)
+
+
+def test_invalid_registry_version_is_rejected() -> None:
+    # Given: malformed untrusted registry metadata
+    def fetch() -> str:
+        return "not-a-version"
+
+    service = UpdateService("0.2.1", fetch, lambda _latest: None)
+
+    # When / Then: Forge rejects it before requesting approval
+    with pytest.raises(UpdateError, match="version"):
+        coordinate_update(service, lambda _latest: True)
+
+
+def test_default_update_check_rejects_unverified_package_source() -> None:
+    # Given / When / Then: no official Forge release source is configured
+    with pytest.raises(UpdateError, match="official release source"):
+        fetch_latest_version()
+
+
+def test_reinstall_uses_fixed_versioned_uv_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: an exact registry version approved for installation
+    commands: list[tuple[str, ...]] = []
+    monkeypatch.setattr(shutil, "which", lambda _name: "/usr/bin/uv")
+
+    def record(
+        command: tuple[str, ...], **_options: bool | float
+    ) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", record)
+
+    # When: the trusted installer boundary executes
+    reinstall_version("0.2.2")
+
+    # Then: it invokes only the fixed uv tool reinstall shape
+    assert commands == [("uv", "tool", "install", "forge@0.2.2", "--force")]
+
+
+def test_update_uses_running_python_when_uv_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: Forge has no uv executable but its running Python has pip
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+
+    # When: Forge selects the exact installer command for approval
+    command = update_command("0.2.2")
+
+    # Then: the command uses the package manager available through this interpreter
+    assert command == (
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--upgrade",
+        "forge==0.2.2",
+    )
+
+
+def test_release_version_matches_project_metadata() -> None:
+    # Given: runtime and package release metadata
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    # When / Then: every maintained version surface identifies this release
+    assert __version__ == "0.2.1"
+    assert project["project"]["version"] == __version__
