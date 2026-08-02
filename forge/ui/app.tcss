@@ -85,7 +85,7 @@ Screen {
 }
 
 #activity-label {
-    width: 22;
+    width: 40;
     height: 1;
 }
 
