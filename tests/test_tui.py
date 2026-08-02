@@ -126,27 +126,24 @@ async def test_release_source_url_is_configured() -> None:
 
 @pytest.mark.asyncio
 async def test_approved_update_installs_and_requests_restart(monkeypatch) -> None:
-    # Given: PyPI reports a newer version and installation is safely recorded
     installs: list[str] = []
-    monkeypatch.setattr(updates_core, "fetch_latest_version", lambda: "0.2.5")
+    monkeypatch.setattr(updates_core, "fetch_latest_version", lambda: "0.2.6")
     monkeypatch.setattr(updates_core, "reinstall_version", installs.append)
     app = ForgeApp()
 
     async with app.run_test(size=(100, 32)) as pilot:
         composer = app.query_one("#composer", Input)
 
-        # When: the user checks, reviews the exact request, and approves once
         composer.value = "/updates"
         await pilot.press("enter")
         await pilot.pause()
         assert isinstance(app.screen, ApprovalScreen)
-        assert shlex.join(updates_core.update_command("0.2.5")) in app.screen.arguments
+        assert shlex.join(updates_core.update_command("0.2.6")) in app.screen.arguments
         assert "releases.json" in app.screen.arguments
         await pilot.click("#approve")
         await pilot.pause()
 
-        # Then: only that release is installed and Forge requires a restart
-        assert installs == ["0.2.5"]
+        assert installs == ["0.2.6"]
         assert "Restart Forge" in app.query_one("#conversation", ConversationView).transcript
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "forge"
-version = "0.2.4"
+version = "0.2.5"
 description = "Multi-provider terminal AI coding agent"
 requires-python = ">=3.12"
 license = "MIT"
