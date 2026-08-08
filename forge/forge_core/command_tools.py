@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
-import shlex
 import subprocess
-from typing import Final
+from dataclasses import asdict
+
+from forge.validation import (
+    CommandExecutionError,
+    CommandPolicyError,
+    CommandRequest,
+    RestrictedCommandRunner,
+    ValidationResultStore,
+)
 
 from .tools import Tool, ToolError, ToolRegistry
 from .workspace import Workspace
-
-ALLOWED_EXECUTABLES: Final = frozenset({"pytest", "pyright", "ruff"})
 
 
 def _run_read_only_command(arguments: list[str], workspace: Workspace) -> str:
@@ -28,19 +33,10 @@ def _run_read_only_command(arguments: list[str], workspace: Workspace) -> str:
     return result.stdout.strip()
 
 
-def _parse_validation_command(command: str) -> list[str]:
-    try:
-        arguments = shlex.split(command)
-    except ValueError as error:
-        raise ToolError(f"Command could not be parsed: {error}") from error
-    if not arguments:
-        raise ToolError("Command is empty.")
-    if arguments[0] not in ALLOWED_EXECUTABLES:
-        raise ToolError(f"Command executable is not permitted: {arguments[0]}")
-    return arguments
-
-
 def register_command_tools(registry: ToolRegistry, workspace: Workspace) -> None:
+    runner = RestrictedCommandRunner(workspace.root)
+    results = ValidationResultStore(workspace.root)
+
     def git_status() -> str:
         return _run_read_only_command(["git", "status", "--short"], workspace)
 
@@ -48,21 +44,17 @@ def register_command_tools(registry: ToolRegistry, workspace: Workspace) -> None
         output = _run_read_only_command(["git", "diff"], workspace)
         return output or "No unstaged changes."
 
-    def run_command(command: str) -> str:
-        arguments = _parse_validation_command(command)
-        result = subprocess.run(
-            arguments,
-            cwd=workspace.root,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        output = "\n".join(part for part in [result.stdout.strip(), result.stderr.strip()] if part)
-        return json.dumps(
-            {"exit_code": result.returncode, "output": output[:30_000]},
-            indent=2,
-        )
+    def run_command(arguments: list[str]) -> str:
+        try:
+            result = runner.run(CommandRequest(tuple(arguments)))
+        except (CommandExecutionError, CommandPolicyError) as error:
+            record = results.record_unavailable(tuple(arguments), str(error))
+            raise ToolError(f"{error} Validation record: {record.id}") from error
+        record = results.record_execution(result)
+        payload = asdict(result)
+        payload["record_id"] = record.id
+        payload["status"] = record.status
+        return json.dumps(payload, indent=2)
 
     registry.register(
         Tool(
@@ -86,8 +78,14 @@ def register_command_tools(registry: ToolRegistry, workspace: Workspace) -> None
             description="Run an approved validation command inside the project.",
             parameters={
                 "type": "object",
-                "properties": {"command": {"type": "string"}},
-                "required": ["command"],
+                "properties": {
+                    "arguments": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 1,
+                    }
+                },
+                "required": ["arguments"],
                 "additionalProperties": False,
             },
             handler=run_command,

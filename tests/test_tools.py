@@ -260,22 +260,24 @@ class TestCreateToolRegistry:
             assert tool.requires_approval is True
 
     @pytest.mark.parametrize(
-        "command",
+        "arguments",
         [
-            "python -c 'print(1)'",
-            "env pytest",
-            "/bin/sh -c 'pytest'",
-            "git -c alias.run='!sh' run",
+            ["python", "-c", "print(1)"],
+            ["env", "pytest"],
+            ["/bin/sh", "-c", "pytest"],
+            ["git", "-c", "alias.run=!sh", "run"],
         ],
     )
-    def test_run_command_rejects_unrecognized_executables(self, command: str, tmp_path) -> None:
+    def test_run_command_rejects_unrecognized_executables(
+        self, arguments: list[str], tmp_path
+    ) -> None:
         # Given: an approved tool call that wraps execution in an unsafe executable
         registry = create_tool_registry(Workspace(tmp_path))
 
         # When / Then: policy rejects it before a process starts
-        with patch("forge.forge_core.command_tools.subprocess.run") as run:
+        with patch("forge.validation.execution.subprocess.Popen") as run:
             with pytest.raises(ToolError, match="not permitted"):
-                registry.execute("run_command", {"command": command})
+                registry.execute("run_command", {"arguments": arguments})
             run.assert_not_called()
 
     def test_search_files_excludes_forge_state(self, tmp_path) -> None:
