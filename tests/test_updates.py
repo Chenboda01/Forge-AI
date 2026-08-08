@@ -1,3 +1,5 @@
+import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -208,9 +210,15 @@ def test_update_command_always_uses_git_source() -> None:
 
 
 def test_release_version_matches_project_metadata() -> None:
-    # Given: runtime and package release metadata
+    # Given: runtime, package, manifest, and public site release metadata
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    manifest = json.loads(Path("site/releases.json").read_text(encoding="utf-8"))
+    site_html = Path("site/index.html").read_text(encoding="utf-8")
 
-    # When / Then: every maintained version surface identifies this release
-    assert __version__ == "5.0.0"
+    # When: semantic public version labels are collected
+    site_versions = set(re.findall(r"\bv(\d+\.\d+\.\d+)\b", site_html))
+
+    # Then: every maintained version surface identifies the runtime release
     assert project["project"]["version"] == __version__
+    assert manifest["forge"]["latest"] == __version__
+    assert site_versions == {__version__}
