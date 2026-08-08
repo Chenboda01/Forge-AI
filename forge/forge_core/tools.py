@@ -74,8 +74,12 @@ class ToolRegistry:
 def create_tool_registry(workspace: Workspace) -> ToolRegistry:
     from .command_tools import register_command_tools
     from .filesystem_tools import register_filesystem_tools
+    from .patch_tools import register_patch_tools
+    from .validation_tools import register_validation_tools
 
     registry = ToolRegistry(workspace)
     register_filesystem_tools(registry, workspace)
     register_command_tools(registry, workspace)
+    register_patch_tools(registry, workspace)
+    register_validation_tools(registry, workspace)
     return registry
