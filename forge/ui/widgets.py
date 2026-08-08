@@ -7,6 +7,48 @@ from textual.widgets import ProgressBar, Static
 
 from forge.ui.state import ForgeRuntime, estimate_cost
 
+STARTUP_PHASES = [
+    "INITIALIZING CORE",
+    "SCANNING WORKSPACE",
+    "LOADING TOOLCHAIN",
+    "FORGE ONLINE",
+]
+
+FORGE_LOGO = (
+    "███████╗ ██████╗ ██████╗  ██████╗ ███████╗\n"
+    "██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝\n"
+    "█████╗  ██║   ██║██████╔╝██║  ███╗█████╗  \n"
+    "██╔══╝  ██║   ██║██╔══██╗██║   ██║██╔══╝  \n"
+    "██║     ╚██████╔╝██║  ██║╚██████╔╝███████╗\n"
+    "╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝"
+)
+
+
+class StartupBar(Vertical):
+    def __init__(self) -> None:
+        super().__init__(id="startup-overlay")
+
+    def compose(self) -> ComposeResult:
+        yield Static(FORGE_LOGO, id="startup-logo")
+        yield Static("", id="startup-spacer")
+        yield Static("◇ INITIALIZING", id="startup-phase")
+        yield Static("\u2591" * 30, id="startup-progress")
+
+    def set_phase(self, phase_idx: int, label: str) -> None:
+        total = len(STARTUP_PHASES)
+        filled = int(phase_idx / total * 30)
+        bar = "\u2588" * filled + "\u2591" * (30 - filled)
+        self.query_one("#startup-phase", Static).update(f"\u25c7 {label}")
+        self.query_one("#startup-progress", Static).update(bar)
+
+
+class EftBanner(Static):
+    def __init__(self) -> None:
+        super().__init__("EFT: Waiting", id="eft-banner")
+
+    def set_text(self, text: str) -> None:
+        self.update(f"EFT: {text}")
+
 
 class ActivityProgress(Horizontal):
     """Fixed textual and numeric progress state for active Forge work."""
@@ -68,7 +110,12 @@ class StatusRail(Vertical):
         yield Static(id="sidebar-spacer")
         yield Static(id="sidebar-footer")
 
-    def update_status(self, runtime: ForgeRuntime | None, session_name: str) -> None:
+    def update_status(
+        self,
+        runtime: ForgeRuntime | None,
+        session_name: str,
+        eft_text: str = "",
+    ) -> None:
         if runtime is None:
             model = "offline"
             tokens = 0
@@ -92,6 +139,9 @@ class StatusRail(Vertical):
             "",
             "Session",
             session_name or "Untitled",
+            "",
+            "EFT",
+            eft_text or "Waiting",
             "",
             "Context",
             f"{tokens:,} tokens",
