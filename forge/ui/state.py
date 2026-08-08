@@ -2,10 +2,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from ..checkpoints import CheckpointManager
 from ..forge_core.agent import ForgeAgent
 from ..forge_core.provider import ForgeProvider
 from ..forge_core.sessions import SessionManager
 from ..forge_core.subagents import SubagentRunner
+from ..recovery import RecoveryManager
 
 PRICING: Final[dict[str, tuple[float, float]]] = {
     "deepseek/deepseek-chat": (0.27, 1.10),
@@ -24,8 +26,11 @@ class ForgeRuntime:
     agent: ForgeAgent
     subagents: SubagentRunner
     sessions: SessionManager
+    checkpoints: CheckpointManager
+    recovery: RecoveryManager
     workspace: Path
     version: str
+    eft_text: str = ""
 
 
 def estimate_cost(agent: ForgeAgent) -> float | None:

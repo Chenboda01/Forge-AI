@@ -2,6 +2,7 @@ from pathlib import Path
 
 from rich.console import Console
 
+from .checkpoints import CheckpointManager
 from .forge_core.agent import ForgeAgent
 from .forge_core.config import get_default_model
 from .forge_core.delegation import register_delegation_tool
@@ -10,6 +11,7 @@ from .forge_core.sessions import SessionManager
 from .forge_core.subagents import SubagentRunner
 from .forge_core.tools import create_tool_registry
 from .forge_core.workspace import Workspace
+from .recovery import RecoveryManager
 from .ui.app import ForgeApp
 from .ui.state import ForgeRuntime
 from .version import __version__
@@ -34,6 +36,8 @@ def build_runtime(workspace_root: Path | None = None) -> ForgeRuntime:
         agent=agent,
         subagents=subagents,
         sessions=SessionManager(workspace_path),
+        checkpoints=CheckpointManager(workspace),
+        recovery=RecoveryManager(workspace_path),
         workspace=workspace_path,
         version=FORGE_VERSION,
     )
