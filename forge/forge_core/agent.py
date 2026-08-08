@@ -34,7 +34,7 @@ class ForgeAgent:
     ):
         self.provider = provider
         self.tools = tools
-        self.max_steps = 15
+        self.max_steps = 100
         self.presenter = presenter or SilentPresenter()
         self._cancel_requested = Event()
         self._cancel_lock = Lock()
