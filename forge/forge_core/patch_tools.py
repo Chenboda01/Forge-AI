@@ -1,3 +1,4 @@
+from threading import Lock
 from uuid import uuid4
 
 from forge.checkpoints import CheckpointManager
@@ -9,21 +10,33 @@ from forge.patches import (
     render_preview,
 )
 
-from .tools import Tool, ToolError, ToolRegistry
+from .tools import Permission, RiskLevel, Tool, ToolError, ToolRegistry
 from .workspace import Workspace
 
 
 def register_patch_tools(registry: ToolRegistry, workspace: Workspace) -> None:
     applier = PatchApplier(workspace, CheckpointManager(workspace))
+    preview_lock = Lock()
+    previewed_patch: str | None = None
 
     def propose_patch(patch: str) -> str:
+        nonlocal previewed_patch
         try:
             proposal = parse_patch(patch, workspace)
         except PatchError as error:
             raise ToolError(f"Patch rejected: {error}") from error
+        with preview_lock:
+            previewed_patch = patch
         return render_preview(proposal)
 
     def apply_patch(patch: str) -> str:
+        nonlocal previewed_patch
+        with preview_lock:
+            if patch != previewed_patch:
+                raise ToolError(
+                    "Patch application rejected: patch must exactly match the most recent preview."
+                )
+            previewed_patch = None
         try:
             record = applier.apply(
                 patch,
@@ -51,6 +64,10 @@ def register_patch_tools(registry: ToolRegistry, workspace: Workspace) -> None:
                 "additionalProperties": False,
             },
             handler=propose_patch,
+            permission=Permission.PROPOSE_PATCH,
+            risk_level=RiskLevel.LOW,
+            timeout_seconds=20,
+            max_output_bytes=30_000,
         )
     )
     registry.register(
@@ -65,5 +82,10 @@ def register_patch_tools(registry: ToolRegistry, workspace: Workspace) -> None:
             },
             handler=apply_patch,
             requires_approval=True,
+            permission=Permission.APPLY_PATCH,
+            risk_level=RiskLevel.MEDIUM,
+            modifies_workspace=True,
+            timeout_seconds=60,
+            max_output_bytes=30_000,
         )
     )

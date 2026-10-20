@@ -7,11 +7,12 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, TextArea
+from textual.widgets import Button, OptionList, TextArea
 
 from forge.forge_core.agent import AgentError, AgentInterruptedError
 from forge.forge_core.subagents import SUBAGENTS, SubagentError, SubagentInterruptedError
 from forge.ui.approval import ApprovalScreen
+from forge.ui.command_palette import CommandPaletteScreen
 from forge.ui.commands import CommandService, handle_command
 from forge.ui.keyboard import KeyboardController, request_interrupt
 from forge.ui.state import ForgeRuntime
@@ -21,6 +22,8 @@ from forge.ui.widgets import (
     ActivityProgress,
     ConversationView,
     EftBanner,
+    FooterBar,
+    HeaderBar,
     StartupBar,
     StatusRail,
 )
@@ -63,18 +66,21 @@ class ForgeApp(App[None]):
             runtime.agent.presenter = self
 
     def compose(self) -> ComposeResult:
-        with Horizontal(id="shell"):
-            with Vertical(id="main"):
-                yield EftBanner()
-                yield ConversationView()
-                yield ActivityProgress()
-                yield TextArea(
-                    "",
-                    placeholder="Ask Forge or enter /help",
-                    id="composer",
-                    show_line_numbers=False,
-                )
-            yield StatusRail(id="sidebar")
+        with Vertical(id="shell"):
+            yield HeaderBar()
+            with Horizontal(id="body"):
+                with Vertical(id="main"):
+                    yield EftBanner()
+                    yield ConversationView()
+                    yield ActivityProgress()
+                    yield TextArea(
+                        "",
+                        placeholder="Ask Forge or enter /help",
+                        id="composer",
+                        show_line_numbers=False,
+                    )
+                yield StatusRail(id="sidebar")
+            yield FooterBar()
         yield StartupBar()
 
     async def on_mount(self) -> None:
@@ -89,7 +95,7 @@ class ForgeApp(App[None]):
                 "forge",
             )
         else:
-            shell = self.query_one("#shell", Horizontal)
+            shell = self.query_one("#shell", Vertical)
             shell.display = False
             asyncio.create_task(self._boot_sequence())
 
@@ -105,7 +111,7 @@ class ForgeApp(App[None]):
             bar.set_phase(i, phase)
             await asyncio.sleep(0.35)
         bar.display = False
-        shell = self.query_one("#shell", Horizontal)
+        shell = self.query_one("#shell", Vertical)
         shell.display = True
         await self._append_entry(
             "FORGE",
@@ -117,6 +123,30 @@ class ForgeApp(App[None]):
         is_wide = event.size.width >= 72
         with contextlib.suppress(Exception):
             self.query_one("#sidebar", StatusRail).display = is_wide
+            self.query_one("#header-right").display = is_wide
+            self.query_one("#footer-right").display = is_wide
+
+    async def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if event.text_area.id != "composer":
+            return
+        if event.text_area.text != "/":
+            return
+        if isinstance(self.screen, CommandPaletteScreen):
+            return
+        await self._open_command_palette()
+
+    async def _open_command_palette(self) -> None:
+        composer = self.query_one("#composer", TextArea)
+
+        async def selected(command: str | None) -> None:
+            if command is None:
+                composer.focus()
+                return
+            composer.load_text(f"{command} ")
+            composer.focus()
+            composer.cursor_location = (0, len(composer.text))
+
+        await self.push_screen(CommandPaletteScreen(), callback=selected)
 
     async def on_key(self, event: events.Key) -> None:
         if event.key == "escape":
@@ -147,6 +177,9 @@ class ForgeApp(App[None]):
         focused = self.screen.focused
         if isinstance(focused, Button):
             focused.press()
+            return
+        if isinstance(focused, OptionList):
+            focused.action_select()
             return
         composer = self.query_one("#composer", TextArea)
         if not composer.has_focus or composer.disabled:
@@ -377,6 +410,8 @@ class ForgeApp(App[None]):
             self.session_name,
             self._eft_text,
         )
+        self.query_one("#header", HeaderBar).update_status(self.runtime, self.session_name)
+        self.query_one("#footer", FooterBar).update_status(self.runtime)
 
     def _set_busy(self, busy: bool, label: str = "Working") -> None:
         self._busy = busy

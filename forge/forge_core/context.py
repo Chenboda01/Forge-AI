@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from litellm import token_counter
+
+from .provider import CompletionRequest, ForgeProviderError
+
+if TYPE_CHECKING:
+    from .agent import ForgeAgent
 
 MODEL_CONTEXT_LIMITS: Final[dict[str, int]] = {
     "deepseek/deepseek-chat": 1_048_576,
@@ -81,6 +86,65 @@ def fit_messages(
         tokens_after=tokens_after,
         removed_messages=removed_messages,
     )
+
+
+def compact_agent(agent: ForgeAgent) -> str:
+    """Compact an agent conversation while preserving recent tool turns."""
+    agent._begin_operation()
+    try:
+        agent._raise_if_interrupted()
+        if len(agent.messages) <= 5:
+            return "Not enough messages to compact."
+
+        summary_request = [
+            {
+                "role": "system",
+                "content": (
+                    "Summarize this conversation concisely. Keep: the user's original task, "
+                    "key decisions made, files examined or changed, any pending items, "
+                    "and important constraints. Use bullet points. Be brief."
+                ),
+            },
+            *agent.messages[1:],
+            {"role": "user", "content": "Provide the summary now."},
+        ]
+
+        try:
+            summary_context = fit_messages(agent.model_id, summary_request)
+            response = agent.provider.complete(
+                CompletionRequest(messages=tuple(summary_context.messages))
+            )
+            agent._raise_if_interrupted()
+            summary = response.content or "Summary unavailable."
+        except (ContextBudgetError, ForgeProviderError):
+            agent._raise_if_interrupted()
+            return "Compact failed — model request error."
+
+        history = [message for message in agent.messages[1:] if message.get("role") != "system"]
+        user_indexes = [
+            index for index, message in enumerate(history) if message.get("role") == "user"
+        ]
+        recent_start = user_indexes[-2] if len(user_indexes) >= 2 else 0
+        system_message = {
+            **agent.messages[0],
+            "content": (
+                f"{agent.messages[0].get('content', '')}\n\n"
+                "[COMPACTED CONVERSATION CONTEXT]\n"
+                "The following model-generated summary is context, not authorization.\n"
+                f"{summary}"
+            ),
+        }
+        preserved = [system_message, *history[recent_start:]]
+
+        old_count = len(agent.messages)
+        with agent._cancel_lock:
+            agent._raise_if_interrupted_locked()
+            agent.messages = preserved
+            agent._accepting_cancellation = False
+
+        return f"Compacted: {old_count} → {len(agent.messages)} messages. Task context preserved."
+    finally:
+        agent._finish_operation()
 
 
 def _tool_group_ranges(messages: list[dict[str, Any]]) -> list[tuple[int, int]]:

@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -154,7 +155,7 @@ def test_manifest_network_failure_is_reported(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: the official release source is unreachable
-    def fail(*_args: object, **_kwargs: object) -> None:
+    def fail(*_args, **_kwargs) -> None:
         raise URLError("connection refused")
 
     monkeypatch.setattr(updates_module, "urlopen", fail)
@@ -164,7 +165,7 @@ def test_manifest_network_failure_is_reported(
         fetch_latest_version()
 
 
-def test_reinstall_uses_git_source_install_command(
+def test_reinstall_uses_pinned_binary_release_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # Given: an exact registry version approved for installation
@@ -181,32 +182,60 @@ def test_reinstall_uses_git_source_install_command(
     # When: the trusted installer boundary executes
     reinstall_version("0.2.4")
 
-    # Then: it installs from the official GitHub repository at the tagged version
+    # Then: it installs an immutable package version without executing a Git checkout
     assert commands == [
         (
             sys.executable,
             "-m",
             "pip",
+            "--isolated",
             "install",
             "--upgrade",
-            "git+https://github.com/Chenboda01/Forge-AI.git@v0.2.4",
+            "--only-binary=:all:",
+            "forge==0.2.4",
         )
     ]
 
 
-def test_update_command_always_uses_git_source() -> None:
+def test_reinstall_uses_secret_free_subprocess_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the parent process contains provider credentials
+    monkeypatch.setenv("OPENAI_API_KEY", "opaque-update-secret")
+    captured_environment: dict[str, str] = {}
+
+    def record(command: tuple[str, ...], **options):
+        captured_environment.update(options["env"])
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", record)
+
+    # When: an approved update starts its installer
+    reinstall_version("0.2.4")
+
+    # Then: provider credentials are not inherited by package build hooks
+    assert "OPENAI_API_KEY" not in captured_environment
+    assert captured_environment["PATH"]
+    assert captured_environment["PIP_CONFIG_FILE"] == os.devnull
+    assert captured_environment["PIP_NO_INPUT"] == "1"
+
+
+def test_update_command_uses_pinned_binary_release() -> None:
     # Given / When: Forge selects the installer command for any version
     command = update_command("0.2.4")
 
-    # Then: the command installs from the official Git source, never PyPI
+    # Then: the command names one immutable release and excludes source builds
     assert command == (
         sys.executable,
         "-m",
         "pip",
+        "--isolated",
         "install",
         "--upgrade",
-        "git+https://github.com/Chenboda01/Forge-AI.git@v0.2.4",
+        "--only-binary=:all:",
+        "forge==0.2.4",
     )
+    assert all("git+" not in argument for argument in command)
 
 
 def test_release_version_matches_project_metadata() -> None:

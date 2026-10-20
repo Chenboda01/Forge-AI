@@ -5,7 +5,9 @@ from dataclasses import dataclass
 from threading import Event, Lock
 from typing import Any
 
+from .instructions import ProjectInstructions, TaskMetadata
 from .provider import CompletionRequest, ForgeProviderError, ProviderClient
+from .redaction import redact_text
 from .tools import ToolError, ToolRegistry
 
 
@@ -89,9 +91,16 @@ class SubagentInterruptedError(SubagentError):
 class SubagentRunner:
     """Runs one isolated read-only subagent and returns its final report."""
 
-    def __init__(self, tool_registry: ToolRegistry, provider: ProviderClient) -> None:
+    def __init__(
+        self,
+        tool_registry: ToolRegistry,
+        provider: ProviderClient,
+        project_instructions: ProjectInstructions | None = None,
+    ) -> None:
         self.tool_registry = tool_registry
         self.provider = provider
+        self.project_instructions = project_instructions or ProjectInstructions()
+        self.task_metadata: TaskMetadata = self.project_instructions.task_metadata
         self._cancel_requested = Event()
         self._cancel_lock = Lock()
         self._accepting_cancellation = False
@@ -155,13 +164,18 @@ class SubagentRunner:
             )
 
         tools = self.tool_registry.only(spec.allowed_tools)
-        prompt = self._build_prompt(
-            objective=objective,
-            context_files=context_files or [],
-            constraints=constraints or [],
+        prompt = redact_text(
+            self._build_prompt(
+                objective=objective,
+                context_files=context_files or [],
+                constraints=constraints or [],
+            )
         )
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": spec.system_prompt},
+            {
+                "role": "system",
+                "content": self.project_instructions.with_core_prompt(spec.system_prompt),
+            },
             {"role": "user", "content": prompt},
         ]
 
@@ -224,7 +238,7 @@ class SubagentRunner:
         with self._cancel_lock:
             self._raise_if_interrupted_locked()
             self._accepting_cancellation = False
-        return content
+        return redact_text(content)
 
     @staticmethod
     def _build_prompt(

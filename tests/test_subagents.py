@@ -1,7 +1,7 @@
 import pytest
 
 from forge.forge import build_runtime
-from forge.forge_core.provider import CompletionRequest, CompletionResponse
+from forge.forge_core.provider import CompletionRequest, CompletionResponse, TokenUsage
 from forge.forge_core.subagents import SUBAGENTS, SubagentError
 from forge.ui.commands import CommandService
 
@@ -34,8 +34,8 @@ def test_subagent_tool_sets_remain_read_only(monkeypatch, tmp_path) -> None:
         for name, spec in SUBAGENTS.items()
     }
 
-    # Then: no subagent can write, execute commands, or delegate recursively
-    forbidden = {"write_file", "run_command", "delegate_task"}
+    # Then: no subagent can apply patches, execute commands, or delegate recursively
+    forbidden = {"apply_patch", "run_command", "delegate_task"}
     assert all(tools.isdisjoint(forbidden) for tools in role_tools.values())
 
 
@@ -59,7 +59,7 @@ def test_subagent_discards_report_after_interrupt(monkeypatch, tmp_path) -> None
 
     def complete(_request: CompletionRequest) -> CompletionResponse:
         runner.cancel()
-        return CompletionResponse("late report", (), 0, 0, "stop")
+        return CompletionResponse("late report", (), TokenUsage(0, 0), "stop")
 
     monkeypatch.setattr(runner.provider, "complete", complete)
 
@@ -77,7 +77,7 @@ def test_subagent_cancellation_at_report_commit_does_not_poison_next_run(
     monkeypatch.setattr(
         runner.provider,
         "complete",
-        lambda _request: CompletionResponse("report", (), 0, 0, "stop"),
+        lambda _request: CompletionResponse("report", (), TokenUsage(0, 0), "stop"),
     )
     original_check = runner._raise_if_interrupted
     check_count = 0
@@ -98,3 +98,45 @@ def test_subagent_cancellation_at_report_commit_does_not_poison_next_run(
     # Then: a later subagent request remains usable
     monkeypatch.setattr(runner, "_raise_if_interrupted", original_check)
     assert runner.run("explore", "second") == "report"
+
+
+def test_subagent_redacts_provider_text_before_returning_report(monkeypatch, tmp_path) -> None:
+    # Given: a provider report containing a credential-shaped value
+    secret = "sk-proj-syntheticcredential1234567890"
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runner = build_runtime(tmp_path).subagents
+    monkeypatch.setattr(
+        runner.provider,
+        "complete",
+        lambda _request: CompletionResponse(f"report {secret}", (), TokenUsage(0, 0), "stop"),
+    )
+
+    # When: a direct subagent invocation returns its report
+    report = runner.run("explore", "inspect")
+
+    # Then: the trusted caller never receives the raw credential
+    assert secret not in report
+    assert "[REDACTED]" in report
+
+
+def test_subagent_redacts_objective_credentials_before_provider_request(
+    monkeypatch, tmp_path
+) -> None:
+    # Given: a delegated objective containing a credential-shaped value
+    secret = "sk-proj-syntheticcredential1234567890"
+    requests: list[CompletionRequest] = []
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runner = build_runtime(tmp_path).subagents
+
+    def complete(request: CompletionRequest) -> CompletionResponse:
+        requests.append(request)
+        return CompletionResponse("done", (), TokenUsage(0, 0), "stop")
+
+    monkeypatch.setattr(runner.provider, "complete", complete)
+
+    # When: Forge delegates the objective
+    runner.run("explore", f"inspect {secret}")
+
+    # Then: the isolated provider context contains only redacted text
+    assert secret not in str(requests[0].messages)
+    assert "[REDACTED]" in str(requests[0].messages)

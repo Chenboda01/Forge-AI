@@ -111,3 +111,89 @@ def test_runtime_detects_and_displays_recovery_items_at_startup(
 
     assert runtime.recovery.items
     assert "incomplete_checkpoint" in output
+
+
+def test_recovery_ignores_external_state_symlinks(tmp_path: Path) -> None:
+    # Given: session and patch records redirected to attacker-controlled external JSON
+    state = tmp_path / ".forge"
+    sessions = state / "sessions"
+    patches = state / "patches"
+    sessions.mkdir(parents=True)
+    patches.mkdir()
+    external_session = tmp_path / "outside-session.json"
+    external_session.write_text(json.dumps({"task": {"status": "running"}}), encoding="utf-8")
+    external_patch = tmp_path / "outside-patch.json"
+    external_patch.write_text(
+        json.dumps({"status": "in_progress", "checkpoint_id": "abcdef123456"}),
+        encoding="utf-8",
+    )
+    (sessions / "external123.json").symlink_to(external_session)
+    (patches / "external456.json").symlink_to(external_patch)
+
+    # When: Forge inspects its recovery state
+    from forge.recovery import RecoveryManager
+
+    recovery = RecoveryManager(tmp_path)
+
+    # Then: external content creates no trusted recovery action
+    assert recovery.items == ()
+
+
+def test_recovery_revalidates_record_before_restore(monkeypatch, tmp_path: Path) -> None:
+    # Given: an inspected partial patch replaced with an external symlink before restoration
+    state = tmp_path / ".forge"
+    patches = state / "patches"
+    patches.mkdir(parents=True)
+    record = patches / "patch123456.json"
+    record.write_text(
+        json.dumps({"status": "in_progress", "checkpoint_id": "abcdef123456"}),
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps({"status": "in_progress"}), encoding="utf-8")
+    from forge.checkpoints import CheckpointManager
+    from forge.recovery import RecoveryError, RecoveryManager
+
+    recovery = RecoveryManager(tmp_path)
+    item = recovery.items[0]
+    record.unlink()
+    record.symlink_to(outside)
+    undo_called = False
+
+    def record_undo(_manager, _checkpoint_id: str) -> None:
+        nonlocal undo_called
+        undo_called = True
+
+    monkeypatch.setattr(CheckpointManager, "undo", record_undo)
+
+    # When / Then: restoration rejects the changed path before checkpoint authority is used
+    with pytest.raises(RecoveryError, match="outside Forge state"):
+        recovery.restore(item.id)
+    assert undo_called is False
+
+
+def test_recovery_scan_rejects_symlink_replacement_before_read(monkeypatch, tmp_path: Path) -> None:
+    # Given: a contained session replaced after recovery validates its resolved path
+    sessions = tmp_path / ".forge" / "sessions"
+    sessions.mkdir(parents=True)
+    target = sessions / "session123.json"
+    target.write_text(json.dumps({"task": {"status": "completed"}}), encoding="utf-8")
+    outside = tmp_path / "outside-session.json"
+    outside.write_text(json.dumps({"task": {"status": "running"}}), encoding="utf-8")
+    original_resolve = Path.resolve
+
+    def resolve_then_replace(path: Path, *args, **kwargs) -> Path:
+        resolved = original_resolve(path, *args, **kwargs)
+        if path == target and not target.is_symlink():
+            target.unlink()
+            target.symlink_to(outside)
+        return resolved
+
+    monkeypatch.setattr(Path, "resolve", resolve_then_replace)
+    from forge.recovery import RecoveryKind, RecoveryManager
+
+    # When: startup recovery scans the changed record
+    recovery = RecoveryManager(tmp_path)
+
+    # Then: external task state is treated as corruption, never as resumable authority
+    assert tuple(item.kind for item in recovery.items) == (RecoveryKind.CORRUPT_SESSION,)

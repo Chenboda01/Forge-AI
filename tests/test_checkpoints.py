@@ -119,6 +119,127 @@ def test_checkpoint_rejects_unknown_or_corrupt_record(tmp_path: Path) -> None:
         manager.undo("abcdef123456")
 
 
+def test_checkpoint_rejects_external_record_symlink(tmp_path: Path) -> None:
+    # Given: a valid checkpoint identifier redirected to JSON outside Forge state
+    manager = CheckpointManager(Workspace(tmp_path))
+    checkpoint_id = "abcdef123456"
+    outside = tmp_path / "outside.json"
+    outside.write_text(
+        json.dumps(
+            {
+                "id": checkpoint_id,
+                "task_id": "task",
+                "patch_id": "patch",
+                "created_at": "2026-09-13T00:00:00+00:00",
+                "files": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (manager.root / f"{checkpoint_id}.json").symlink_to(outside)
+
+    # When / Then: external checkpoint content cannot become restoration authority
+    with pytest.raises(CheckpointError, match="outside Forge checkpoint storage"):
+        manager.load(checkpoint_id)
+
+
+def test_checkpoint_rejects_symlink_replacement_before_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: a checkpoint replaced with an external record after path validation
+    manager = CheckpointManager(Workspace(tmp_path))
+    checkpoint_id = "abcdef123456"
+    target = manager.root / f"{checkpoint_id}.json"
+    payload = json.dumps(
+        {
+            "id": checkpoint_id,
+            "task_id": "task",
+            "patch_id": "patch",
+            "created_at": "2026-09-23T00:00:00+00:00",
+            "files": [],
+        }
+    )
+    target.write_text(payload, encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text(payload, encoding="utf-8")
+    original_is_file = Path.is_file
+
+    def replace_before_read(path: Path) -> bool:
+        if path == target:
+            target.unlink()
+            target.symlink_to(outside)
+            return True
+        return original_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", replace_before_read)
+
+    # When / Then: external checkpoint content cannot become restoration authority
+    with pytest.raises(CheckpointError, match="changed during access"):
+        manager.load(checkpoint_id)
+
+
+def test_checkpoint_creation_rejects_symlink_replacement_before_capture(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: an approved target replaced with an external symlink before checkpoint capture
+    proposal = proposal_for_existing_and_new(tmp_path)
+    manager = CheckpointManager(Workspace(tmp_path))
+    target = tmp_path / "existing.txt"
+    outside = tmp_path.parent / "outside-checkpoint.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    original_is_file = Path.is_file
+
+    def replace_before_capture(path: Path) -> bool:
+        if path == target:
+            target.unlink()
+            target.symlink_to(outside)
+            return True
+        return original_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", replace_before_capture)
+
+    # When / Then: external content cannot become rollback authority
+    with pytest.raises(CheckpointError, match="workspace|changed during access"):
+        manager.create(proposal, task_id="task", patch_id="patch")
+    assert not tuple(manager.root.glob("*.json"))
+
+
+def test_undo_rejects_parent_directory_replacement_before_restore(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: a checkpoint target whose parent is replaced before restoration
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    target = nested / "existing.txt"
+    target.write_text("before\n", encoding="utf-8")
+    proposal = parse_patch(
+        "--- a/nested/existing.txt\n+++ b/nested/existing.txt\n@@ -1 +1 @@\n-before\n+after\n",
+        Workspace(tmp_path),
+    )
+    manager = CheckpointManager(Workspace(tmp_path))
+    record = manager.create(proposal, task_id="task-race", patch_id="patch-race")
+    target.write_text("after\n", encoding="utf-8")
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-undo"
+    outside.mkdir()
+    external = outside / "existing.txt"
+    external.write_text("external\n", encoding="utf-8")
+    original_atomic_write = manager._atomic_write
+
+    def replace_parent_then_write(path: Path, content: str) -> None:
+        if path == target:
+            target.unlink()
+            nested.rmdir()
+            nested.symlink_to(outside, target_is_directory=True)
+        original_atomic_write(path, content)
+
+    monkeypatch.setattr(manager, "_atomic_write", replace_parent_then_write)
+
+    # When / Then: restoration fails closed without modifying the external file
+    with pytest.raises(CheckpointError, match="changed during access"):
+        manager.undo(record.id)
+    assert external.read_text(encoding="utf-8") == "external\n"
+
+
 def test_checkpoint_and_undo_commands_use_latest_record(monkeypatch, tmp_path: Path) -> None:
     # Given: a runtime with a checkpoint followed by a simulated edit
     monkeypatch.setenv("FORGE_MODEL", "ollama")

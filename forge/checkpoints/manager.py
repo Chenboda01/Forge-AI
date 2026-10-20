@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -9,6 +8,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final
 from uuid import uuid4
 
+from forge.forge_core.safe_io import (
+    SafeReadError,
+    SafeWriteError,
+    atomic_write_text_beneath,
+    ensure_directory_beneath,
+    read_bytes_beneath,
+    unlink_file_beneath,
+)
 from forge.forge_core.workspace import Workspace, WorkspaceError
 
 from .models import CheckpointError, CheckpointFile, CheckpointRecord
@@ -17,14 +24,17 @@ if TYPE_CHECKING:
     from forge.patches.models import PatchProposal
 
 CHECKPOINT_ID: Final = re.compile(r"^[0-9a-f]{12}$")
+MAX_CHECKPOINT_BYTES: Final = 10_000_000
 
 
 class CheckpointManager:
     def __init__(self, workspace: Workspace) -> None:
         self.workspace = workspace
         self.root = workspace.root / ".forge" / "checkpoints"
-        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.root.chmod(0o700)
+        try:
+            ensure_directory_beneath(workspace.root, self.root)
+        except SafeWriteError as error:
+            raise CheckpointError("Forge state directory changed during access.") from error
 
     def create(
         self,
@@ -49,7 +59,9 @@ class CheckpointManager:
         if not path.is_file():
             raise CheckpointError(f"Checkpoint not found: {checkpoint_id}")
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(
+                read_bytes_beneath(self.root, path, max_bytes=MAX_CHECKPOINT_BYTES).decode("utf-8")
+            )
             files = tuple(
                 CheckpointFile(
                     path=file["path"],
@@ -65,7 +77,9 @@ class CheckpointManager:
                 created_at=payload["created_at"],
                 files=files,
             )
-        except (json.JSONDecodeError, KeyError, TypeError) as error:
+        except SafeReadError as error:
+            raise CheckpointError(f"Checkpoint changed during access: {checkpoint_id}") from error
+        except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError) as error:
             raise CheckpointError(f"Checkpoint is corrupt: {checkpoint_id}") from error
         if record.id != checkpoint_id or not all(self._valid_file(file) for file in record.files):
             raise CheckpointError(f"Checkpoint is corrupt: {checkpoint_id}")
@@ -82,12 +96,14 @@ class CheckpointManager:
             if file.existed:
                 if file.content is None:
                     raise CheckpointError(f"Checkpoint is corrupt: {checkpoint_id}")
-                target.parent.mkdir(parents=True, exist_ok=True)
                 self._atomic_write(target, file.content)
             elif target.exists():
                 if not target.is_file():
                     raise CheckpointError(f"Undo target is not a file: {file.path}")
-                target.unlink()
+                try:
+                    unlink_file_beneath(self.workspace.root, target)
+                except SafeWriteError as error:
+                    raise CheckpointError(f"Path changed during access: {file.path}") from error
         return record
 
     def incomplete_checkpoints(self) -> tuple[str, ...]:
@@ -100,7 +116,9 @@ class CheckpointManager:
         if not path.is_file():
             raise CheckpointError(f"Checkpoint target is not a file: {relative_path}")
         try:
-            content = path.read_text(encoding="utf-8")
+            content = self.workspace.read_text(relative_path)
+        except WorkspaceError as error:
+            raise CheckpointError(str(error)) from error
         except UnicodeDecodeError as error:
             raise CheckpointError(
                 f"Checkpoint target is not UTF-8 text: {relative_path}"
@@ -120,7 +138,14 @@ class CheckpointManager:
     def _record_path(self, checkpoint_id: str) -> Path:
         if CHECKPOINT_ID.fullmatch(checkpoint_id) is None:
             raise CheckpointError(f"Invalid checkpoint ID: {checkpoint_id}")
-        return self.root / f"{checkpoint_id}.json"
+        path = self.root / f"{checkpoint_id}.json"
+        try:
+            path.resolve().relative_to(self.root)
+        except ValueError as error:
+            raise CheckpointError(
+                f"Checkpoint is outside Forge checkpoint storage: {checkpoint_id}"
+            ) from error
+        return path
 
     @staticmethod
     def _valid_file(file: CheckpointFile) -> bool:
@@ -131,16 +156,9 @@ class CheckpointManager:
             and (file.existed or file.content is None)
         )
 
-    @staticmethod
-    def _atomic_write(path: Path, content: str) -> None:
-        temporary = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    def _atomic_write(self, path: Path, content: str) -> None:
+        trusted_root = self.root if path.is_relative_to(self.root) else self.workspace.root
         try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-        except OSError:
-            temporary.unlink(missing_ok=True)
-            raise
+            atomic_write_text_beneath(trusted_root, path, content, create_parents=True)
+        except SafeWriteError as error:
+            raise CheckpointError(f"Path changed during access: {path}") from error

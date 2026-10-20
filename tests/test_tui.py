@@ -50,13 +50,15 @@ async def test_sidebar_is_fixed_to_full_terminal_height() -> None:
         conversation = app.query_one("#conversation")
         sidebar = app.query_one("#sidebar")
         composer = app.query_one("#composer", TextArea)
+        header = app.query_one("#header")
+        footer = app.query_one("#footer")
 
-        # Then: the rail is a narrow fixed column and the composer stays at the bottom
-        assert sidebar.region.y == 0
-        assert sidebar.region.height == 40
+        # Then: the rail fills the body while chrome frames the fixed composer
+        assert sidebar.region.y == header.region.bottom
+        assert sidebar.region.bottom == footer.region.y
         assert sidebar.region.x > conversation.region.x
         assert sidebar.region.width <= 32
-        assert composer.region.bottom == 40
+        assert composer.region.bottom == footer.region.y
 
 
 @pytest.mark.asyncio
@@ -220,12 +222,34 @@ async def test_narrow_terminal_prioritizes_conversation() -> None:
         sidebar = app.query_one("#sidebar")
         composer = app.query_one("#composer", TextArea)
         progress = app.query_one("#agent-progress", ProgressBar)
+        footer = app.query_one("#footer")
 
         # Then: the rail yields all width while the composer remains fixed
         assert sidebar.display is False
         assert progress.show_percentage is False
         assert composer.region.width == 60
-        assert composer.region.bottom == 24
+        assert composer.region.bottom == footer.region.y
+
+
+@pytest.mark.asyncio
+async def test_connected_runtime_renders_status_chrome(monkeypatch, tmp_path) -> None:
+    # Given: a connected local runtime
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    app = ForgeApp(runtime, skip_startup=True)
+
+    # When: the status chrome is mounted
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        header = app.query_one("#header-right", Static).render().plain
+        left = app.query_one("#header-left", Static).render().plain
+        footer = app.query_one("#footer-left", Static).render().plain
+
+        # Then: the active mode/model and primary keyboard hint are visible
+        assert runtime.agent.mode.value in header
+        assert runtime.agent.model_id.rsplit("/", maxsplit=1)[-1] in header
+        assert "\u25c6 FORGE " in left
+        assert "enter send" in footer
 
 
 @pytest.mark.asyncio
@@ -395,7 +419,7 @@ def test_approval_timeout_is_bounded(monkeypatch) -> None:
     monkeypatch.setattr(app, "call_from_thread", lambda *_args: None)
 
     # When: Forge waits for the trusted interface
-    app.request_approval("write_file", "{}")
+    app.request_approval("apply_patch", "{}")
 
     # Then: the pending request expires within one minute
     assert RecordingEvent.timeout is not None

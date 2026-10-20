@@ -1,3 +1,4 @@
+import subprocess
 import tempfile
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -133,7 +134,9 @@ class TestCreateToolRegistry:
             assert "search_files" in tool_names
             assert "git_status" in tool_names
             assert "git_diff" in tool_names
-            assert "write_file" in tool_names
+            assert "propose_patch" in tool_names
+            assert "apply_patch" in tool_names
+            assert "write_file" not in tool_names
             assert "run_command" in tool_names
             assert "delegate_task" not in tool_names
 
@@ -202,55 +205,16 @@ class TestCreateToolRegistry:
             with pytest.raises(ToolError, match="does not exist"):
                 registry.execute("read_file", {"path": "nonexistent.txt"})
 
-    def test_write_file_creates(self):
+    def test_direct_write_tool_is_not_registered(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             workspace = Workspace(root)
             registry = create_tool_registry(workspace)
 
-            result = registry.execute("write_file", {"path": "new.txt", "content": "hello world"})
-            assert "Created" in result
-            assert (root / "new.txt").read_text() == "hello world"
-
-    def test_write_file_updates(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            (root / "existing.txt").write_text("old")
-
-            workspace = Workspace(root)
-            registry = create_tool_registry(workspace)
-
-            result = registry.execute("write_file", {"path": "existing.txt", "content": "new"})
-            assert "Updated" in result
-            assert (root / "existing.txt").read_text() == "new"
-
-    def test_write_file_creates_parents(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            workspace = Workspace(root)
-            registry = create_tool_registry(workspace)
-
-            registry.execute(
-                "write_file",
-                {"path": "deep/nested/file.txt", "content": "hello"},
-            )
-            assert (root / "deep" / "nested" / "file.txt").read_text() == "hello"
-
-    def test_write_file_workspace_enforcement(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            workspace = Workspace(root)
-            registry = create_tool_registry(workspace)
-
-            with pytest.raises(ToolError):
-                registry.execute("write_file", {"path": "../outside.txt", "content": "x"})
-
-    def test_write_tool_requires_approval(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            workspace = Workspace(Path(tmpdir))
-            registry = create_tool_registry(workspace)
-            tool = registry.get("write_file")
-            assert tool.requires_approval is True
+            # When / Then: the obsolete uncheckpointed write tool cannot mutate the workspace
+            with pytest.raises(ToolError, match="Unknown tool: write_file"):
+                registry.execute("write_file", {"path": "new.txt", "content": "hello world"})
+            assert not (root / "new.txt").exists()
 
     def test_run_command_requires_approval(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -258,6 +222,31 @@ class TestCreateToolRegistry:
             registry = create_tool_registry(workspace)
             tool = registry.get("run_command")
             assert tool.requires_approval is True
+
+    def test_git_diff_does_not_execute_repository_diff_driver(self, tmp_path: Path) -> None:
+        # Given: a repository configured with a project-controlled external diff driver
+        marker = tmp_path / "executed"
+        driver = tmp_path / "driver"
+        driver.write_text(f"#!/bin/sh\ntouch '{marker}'\n", encoding="utf-8")
+        driver.chmod(0o700)
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+        subprocess.run(
+            ["git", "config", "diff.hostile.command", str(driver)],
+            cwd=tmp_path,
+            check=True,
+        )
+        (tmp_path / ".gitattributes").write_text("*.txt diff=hostile\n", encoding="utf-8")
+        target = tmp_path / "target.txt"
+        target.write_text("before\n", encoding="utf-8")
+        subprocess.run(["git", "add", ".gitattributes", "target.txt"], cwd=tmp_path, check=True)
+        target.write_text("after\n", encoding="utf-8")
+        registry = create_tool_registry(Workspace(tmp_path))
+
+        # When: Forge performs its read-only Git diff inspection
+        registry.execute("git_diff", {})
+
+        # Then: repository configuration cannot turn inspection into code execution
+        assert not marker.exists()
 
     @pytest.mark.parametrize(
         "arguments",
@@ -294,3 +283,24 @@ class TestCreateToolRegistry:
         # Then: only project content is exposed
         assert "visible.txt" in result
         assert ".forge" not in result
+
+    def test_search_files_ignores_ambient_ripgrep_executable(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # Given: an attacker-controlled rg executable appears first on ambient PATH
+        attacker_bin = tmp_path / "attacker-bin"
+        attacker_bin.mkdir()
+        marker = tmp_path / "ambient-rg-ran"
+        fake_rg = attacker_bin / "rg"
+        fake_rg.write_text(f"#!/bin/sh\nprintf ran > '{marker}'\nexit 0\n", encoding="utf-8")
+        fake_rg.chmod(0o700)
+        monkeypatch.setenv("PATH", str(attacker_bin))
+        (tmp_path / "visible.txt").write_text("trusted-search-marker", encoding="utf-8")
+        registry = create_tool_registry(Workspace(tmp_path))
+
+        # When: Forge searches repository content
+        result = registry.execute("search_files", {"query": "trusted-search-marker"})
+
+        # Then: only a trusted system ripgrep executable handles the file descriptors
+        assert not marker.exists()
+        assert "visible.txt" in result

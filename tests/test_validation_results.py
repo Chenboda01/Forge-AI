@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from forge.validation import (
     CommandClassification,
     CommandExecutionResult,
@@ -77,3 +79,58 @@ def test_rendered_result_exposes_required_evidence(tmp_path: Path) -> None:
     assert "Duration: 0.250s" in rendered
     assert "Truncated: no" in rendered
     assert "tests failed" in rendered
+
+
+def test_validation_result_store_redacts_configured_secret_values(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: command output contains an arbitrary configured credential value
+    from forge.forge_core.config import get_api_key
+    from forge.validation import ValidationResultStore
+
+    secret = "opaque-validation-secret-value"
+    monkeypatch.setenv("TEST_API_KEY", secret)
+    assert get_api_key("TEST_API_KEY") == secret
+    store = ValidationResultStore(tmp_path)
+
+    # When: validation evidence is persisted
+    result = execution(passed=False)
+    result = CommandExecutionResult(
+        arguments=result.arguments,
+        classification=result.classification,
+        network_policy=result.network_policy,
+        exit_code=result.exit_code,
+        output=f"failure included {secret}",
+        output_bytes=32,
+        truncated=result.truncated,
+        timed_out=result.timed_out,
+        passed=result.passed,
+        duration_seconds=result.duration_seconds,
+    )
+    record = store.record_execution(result)
+
+    # Then: neither the typed record nor its file contains the credential
+    persisted = (store.root / f"{record.id}.json").read_text(encoding="utf-8")
+    assert secret not in record.output
+    assert secret not in persisted
+
+
+def test_validation_result_store_redacts_unavailable_detail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: a command-boundary failure containing an arbitrary configured credential
+    from forge.forge_core.config import get_api_key
+    from forge.validation import ValidationResultStore
+
+    secret = "opaque-unavailable-detail-secret"
+    monkeypatch.setenv("TEST_API_KEY", secret)
+    assert get_api_key("TEST_API_KEY") == secret
+    store = ValidationResultStore(tmp_path)
+
+    # When: Forge persists the unavailable validation result
+    record = store.record_unavailable(("pytest",), f"runner rejected {secret}")
+
+    # Then: neither the typed result nor durable evidence contains the credential
+    persisted = (store.root / f"{record.id}.json").read_text(encoding="utf-8")
+    assert secret not in record.detail
+    assert secret not in persisted

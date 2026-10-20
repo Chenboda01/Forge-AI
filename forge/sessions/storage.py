@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import asdict
 from pathlib import Path
 from typing import Final
-from uuid import uuid4
 
 from forge.forge_core.redaction import redact_text
+from forge.forge_core.safe_io import (
+    SafeReadError,
+    SafeWriteError,
+    atomic_write_text_beneath,
+    ensure_directory_beneath,
+    read_bytes_beneath,
+)
 from forge.validation import ValidationRecord, ValidationStatus
 
 from .models import (
@@ -24,35 +29,34 @@ from .models import (
 )
 
 SESSION_ID: Final = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+MAX_SESSION_BYTES: Final = 10_000_000
 
 
 class SessionStore:
     def __init__(self, root: Path) -> None:
-        self.root = root.resolve() / ".forge" / "sessions"
-        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.root.chmod(0o700)
+        self.workspace_root = root.resolve()
+        self.root = self.workspace_root / ".forge" / "sessions"
+        try:
+            ensure_directory_beneath(self.workspace_root, self.root)
+        except SafeWriteError as error:
+            raise SessionStorageError("Forge state directory changed during access.") from error
 
     def save(self, snapshot: SessionSnapshot) -> None:
         target = self._path(snapshot.id)
-        temporary = self.root / f".{snapshot.id}.{uuid4().hex}.tmp"
         payload = redact_text(json.dumps(asdict(snapshot), indent=2))
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                stream.write(payload)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, target)
-        except OSError:
-            temporary.unlink(missing_ok=True)
-            raise
+            atomic_write_text_beneath(self.workspace_root, target, payload)
+        except SafeWriteError as error:
+            raise SessionStorageError(f"Session changed during access: {snapshot.id}") from error
 
     def load(self, session_id: str) -> SessionSnapshot | None:
         path = self._path(session_id)
         if not path.is_file():
             return None
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload = json.loads(
+                read_bytes_beneath(self.root, path, max_bytes=MAX_SESSION_BYTES).decode("utf-8")
+            )
             snapshot = SessionSnapshot(
                 id=payload["id"],
                 created_at=payload["created_at"],
@@ -73,7 +77,9 @@ class SessionStore:
                 subagents=tuple(SubagentSessionRecord(**item) for item in payload["subagents"]),
                 usage=UsageRecord(**payload["usage"]),
             )
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+        except SafeReadError as error:
+            raise SessionStorageError(f"Session changed during access: {session_id}") from error
+        except (json.JSONDecodeError, KeyError, TypeError, UnicodeDecodeError, ValueError) as error:
             raise SessionStorageError(f"Session is corrupt: {session_id}") from error
         if snapshot.id != session_id:
             raise SessionStorageError(f"Session is corrupt: {session_id}")
@@ -82,7 +88,14 @@ class SessionStore:
     def _path(self, session_id: str) -> Path:
         if SESSION_ID.fullmatch(session_id) is None:
             raise SessionStorageError(f"Invalid session ID: {session_id}")
-        return self.root / f"{session_id}.json"
+        path = self.root / f"{session_id}.json"
+        try:
+            path.resolve().relative_to(self.root)
+        except ValueError as error:
+            raise SessionStorageError(
+                f"Session is outside Forge session storage: {session_id}"
+            ) from error
+        return path
 
 
 def _validation(item) -> ValidationRecord:

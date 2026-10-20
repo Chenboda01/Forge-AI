@@ -93,6 +93,30 @@ def test_parse_patch_rejects_stale_context(tmp_path: Path) -> None:
         parse_patch(modification_patch(), Workspace(tmp_path))
 
 
+def test_parse_patch_rejects_symlink_replacement_during_context_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: a patch target replaced with an external symlink after containment validation
+    target = tmp_path / "example.py"
+    target.write_text("value = 1\nprint('old')\n", encoding="utf-8")
+    outside = tmp_path.parent / "outside-patch.py"
+    outside.write_text("value = 1\nprint('old')\n", encoding="utf-8")
+    original_is_file = Path.is_file
+
+    def replace_before_read(path: Path) -> bool:
+        if path == target:
+            target.unlink()
+            target.symlink_to(outside)
+            return True
+        return original_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", replace_before_read)
+
+    # When / Then: external content cannot satisfy patch context validation
+    with pytest.raises(PatchError, match="context mismatch"):
+        parse_patch(modification_patch(), Workspace(tmp_path))
+
+
 def test_parse_patch_supports_git_metadata_and_file_deletion(tmp_path: Path) -> None:
     # Given: a standard Git diff deleting a file without a trailing newline
     (tmp_path / "obsolete.txt").write_text("remove me", encoding="utf-8")

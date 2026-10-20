@@ -10,7 +10,7 @@ def test_final_report_renders_only_recorded_evidence() -> None:
         files_changed=("forge/a.py",),
         patch_status=PatchStatus.APPLIED,
         validation=(ValidationStatus.PASSED,),
-        limitations=("Legacy write_file is not recoverable.",),
+        limitations=("Patch application does not create Git commits.",),
         warnings=("Pre-existing changes were present.",),
         checkpoint_id="abc123def456",
     )

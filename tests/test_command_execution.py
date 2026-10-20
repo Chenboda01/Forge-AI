@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -76,6 +77,28 @@ def test_runner_bounds_output_and_reports_truncation(tmp_path: Path) -> None:
     assert result.truncated is True
 
 
+def test_runner_closes_captured_output_pipe(monkeypatch, tmp_path: Path) -> None:
+    # Given: a permitted executable and an observable subprocess instance
+    write_fake_pytest(tmp_path, "print('validated')\n")
+    processes: list[subprocess.Popen[str]] = []
+    real_popen = subprocess.Popen
+
+    def record_process(*args, **kwargs) -> subprocess.Popen[str]:
+        process = real_popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr("forge.validation.execution.subprocess.Popen", record_process)
+    from forge.validation import CommandRequest, RestrictedCommandRunner
+
+    # When: Forge captures the command output
+    RestrictedCommandRunner(tmp_path).run(CommandRequest(("pytest",)))
+
+    # Then: ownership of the output pipe has been released
+    assert processes[0].stdout is not None
+    assert processes[0].stdout.closed is True
+
+
 def test_runner_terminates_process_group_at_timeout(tmp_path: Path) -> None:
     # Given: a permitted executable that cannot finish within its time budget
     write_fake_pytest(tmp_path, "import time\ntime.sleep(5)\n")
@@ -88,6 +111,60 @@ def test_runner_terminates_process_group_at_timeout(tmp_path: Path) -> None:
     assert result.timed_out is True
     assert result.passed is False
     assert result.duration_seconds < 2
+
+
+def test_runner_timeout_kills_descendants_holding_output_pipe(tmp_path: Path) -> None:
+    # Given: a command exits after spawning a descendant that retains stdout
+    write_fake_pytest(
+        tmp_path,
+        "import subprocess\n"
+        "import sys\n"
+        "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'])\n"
+        "print('parent exited')\n",
+    )
+    from forge.validation import CommandRequest, RestrictedCommandRunner
+
+    # When: the descendant keeps the capture pipe open beyond the timeout
+    result = RestrictedCommandRunner(tmp_path).run(CommandRequest(("pytest",), timeout_seconds=0.1))
+
+    # Then: Forge kills the process group and returns promptly
+    assert result.timed_out is True
+    assert result.passed is False
+    assert result.duration_seconds < 2
+
+
+def test_runner_rejects_state_parent_replacement_before_environment_setup(tmp_path: Path) -> None:
+    # Given: initialized runtime state replaced with an external directory before execution
+    from forge.validation import CommandExecutionError, RestrictedCommandRunner
+
+    runner = RestrictedCommandRunner(tmp_path)
+    state = tmp_path / ".forge"
+    state.rename(tmp_path / ".forge-original")
+    outside = tmp_path.parent / f"{tmp_path.name}-outside-runtime"
+    (outside / "runtime-home").mkdir(parents=True)
+    state.symlink_to(outside, target_is_directory=True)
+
+    # When / Then: environment setup fails closed without creating an external cache
+    with pytest.raises(CommandExecutionError, match="state changed"):
+        runner._environment()
+    assert not (outside / "runtime-home" / "cache").exists()
+
+
+def test_runner_does_not_resolve_executables_from_ambient_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: an attacker-controlled executable appears first on ambient PATH
+    attacker_bin = tmp_path / "attacker-bin"
+    attacker_bin.mkdir()
+    executable = attacker_bin / "forge-test-runner"
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+    monkeypatch.setenv("PATH", str(attacker_bin))
+    from forge.validation import CommandExecutionError, RestrictedCommandRunner
+
+    # When / Then: executable resolution ignores ambient PATH and fails closed
+    with pytest.raises(CommandExecutionError, match="trusted locations"):
+        RestrictedCommandRunner(tmp_path)._resolve_executable("forge-test-runner")
 
 
 def test_run_command_tool_accepts_arrays_and_returns_policy_evidence(tmp_path: Path) -> None:

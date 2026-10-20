@@ -25,18 +25,20 @@ class PatchApplicationStatus(StrEnum):
     FAILED = "failed"
 
 
-@dataclass(frozen=True, slots=True)
 class PatchError(Exception):
-    code: PatchErrorCode
-    detail: str
+    def __init__(self, code: PatchErrorCode, detail: str) -> None:
+        self.code = code
+        self.detail = detail
+        super().__init__(code, detail)
 
     def __str__(self) -> str:
         return f"{self.code.value.replace('_', ' ')}: {self.detail}"
 
 
-@dataclass(frozen=True, slots=True)
 class PatchApplicationError(Exception):
-    detail: str
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(detail)
 
     def __str__(self) -> str:
         return self.detail

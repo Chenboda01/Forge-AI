@@ -4,6 +4,7 @@ from typing import Final
 
 from ..checkpoints import CheckpointManager
 from ..forge_core.agent import ForgeAgent
+from ..forge_core.instructions import ProjectInstructions
 from ..forge_core.provider import ForgeProvider
 from ..forge_core.sessions import SessionManager
 from ..forge_core.subagents import SubagentRunner
@@ -30,6 +31,7 @@ class ForgeRuntime:
     recovery: RecoveryManager
     workspace: Path
     version: str
+    project_instructions: ProjectInstructions
     eft_text: str = ""
 
 

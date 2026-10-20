@@ -8,6 +8,7 @@ from forge.forge_core.provider import ForgeProviderError
 from forge.forge_core.subagents import SUBAGENTS
 from forge.ui.checkpoint_commands import checkpoint_text, undo_checkpoint
 from forge.ui.fast_select import FastSelectScreen
+from forge.ui.model_select import ModelSelectScreen
 from forge.ui.recovery_commands import recover, recovery_text
 from forge.ui.session_commands import history_text, resume_session, sessions_text
 from forge.ui.state import ForgeRuntime, estimate_cost
@@ -63,7 +64,7 @@ class CommandService:
     def help_text() -> str:
         return (
             "Commands\n"
-            "/help  /status  /usage  /models  /model NAME\n"
+            "/help  /status  /usage  /models  /model [NAME]\n"
             "/files  /read FILE  /tree  /new  /sessions  /resume ID  /history\n"
             "/agents  /agent NAME OBJECTIVE  /checkpoint  /undo [ID]\n"
             "/recovery  /recover ACTION ID\n"
@@ -91,6 +92,7 @@ class CommandService:
             "Status\n"
             f"Provider: {runtime.provider.model.provider}\n"
             f"Model: {runtime.agent.model_id}\n"
+            f"Mode: {runtime.agent.mode.value}\n"
             f"Workspace: {runtime.workspace}"
         )
 
@@ -212,7 +214,11 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         await app._show_command_result(handler())
         return
     if name == "/model":
-        await app._show_command_result(app.commands.switch_model(argument.strip()))
+        argument = argument.strip()
+        if argument:
+            await app._show_command_result(app.commands.switch_model(argument))
+        else:
+            await _model_select(app)
         return
     if name == "/read":
         await app._show_command_result(app.commands.read_file(argument.strip()))
@@ -284,5 +290,19 @@ async def _theme_select(app: ForgeApp) -> None:
         if name and name in THEMES:
             app.apply_theme(name)
             await app._show_command_result(f"Theme set to {name}.")
+
+    await app.push_screen(screen, callback=selected)
+
+
+async def _model_select(app: ForgeApp) -> None:
+    if app.runtime is None:
+        await app._show_command_result("No model runtime is connected.")
+        return
+
+    screen = ModelSelectScreen()
+
+    async def selected(alias: str | None) -> None:
+        if alias:
+            await app._show_command_result(app.commands.switch_model(alias))
 
     await app.push_screen(screen, callback=selected)

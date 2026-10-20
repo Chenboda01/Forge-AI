@@ -91,3 +91,61 @@ def test_runtime_session_manager_reopens_typed_snapshot(tmp_path: Path) -> None:
     assert loaded is not None
     assert loaded.task == snapshot.task
     assert loaded.usage == snapshot.usage
+
+
+def test_session_store_rejects_external_session_symlink(tmp_path: Path) -> None:
+    # Given: a valid session identifier redirected to JSON outside Forge state
+    from forge.sessions import SessionStorageError, SessionStore
+
+    store = SessionStore(tmp_path)
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    (store.root / "session123456.json").symlink_to(outside)
+
+    # When / Then: the persistence boundary rejects the external symlink before reading it
+    with pytest.raises(SessionStorageError, match="outside Forge session storage"):
+        store.load("session123456")
+
+
+def test_session_store_rejects_symlink_replacement_before_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Given: a valid stored session replaced with an external record after path validation
+    from forge.sessions import SessionStorageError, SessionStore
+
+    store = SessionStore(tmp_path)
+    snapshot = complete_snapshot()
+    store.save(snapshot)
+    target = store.root / f"{snapshot.id}.json"
+    outside = tmp_path / "outside.json"
+    outside.write_text(target.read_text(encoding="utf-8"), encoding="utf-8")
+    original_is_file = Path.is_file
+
+    def replace_before_read(path: Path) -> bool:
+        if path == target:
+            target.unlink()
+            target.symlink_to(outside)
+            return True
+        return original_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", replace_before_read)
+
+    # When / Then: external session content is rejected at the persistence boundary
+    with pytest.raises(SessionStorageError, match="changed during access"):
+        store.load(snapshot.id)
+
+
+def test_session_store_rejects_external_state_directory_symlink(tmp_path: Path) -> None:
+    # Given: project-local Forge state redirected to an external directory
+    from forge.sessions import SessionStorageError, SessionStore
+
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (workspace / ".forge").symlink_to(outside, target_is_directory=True)
+
+    # When / Then: initialization fails closed without creating external state
+    with pytest.raises(SessionStorageError, match="state directory"):
+        SessionStore(workspace)
+    assert not (outside / "sessions").exists()

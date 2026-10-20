@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+import forge.forge_core.models as models_module
 from forge.forge_core.models import DEFAULT_MODEL, MODELS, ModelConfig
 
 
@@ -49,3 +50,13 @@ def test_all_models_have_required_fields():
         assert model.name, f"Model {alias} has no name"
         assert model.model_id, f"Model {alias} has no model_id"
         assert model.provider, f"Model {alias} has no provider"
+
+
+def test_models_declare_capabilities() -> None:
+    # Given: every model Forge can select
+    # When: their capability declarations are inspected
+    # Then: each model has an owned immutable capability value
+    assert all(
+        isinstance(model.capabilities, models_module.ModelCapabilities) for model in MODELS.values()
+    )
+    assert MODELS["ollama"].capabilities.local is True

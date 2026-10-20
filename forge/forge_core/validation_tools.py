@@ -1,6 +1,6 @@
 from forge.validation import ValidationDetectionError, detect_validation, render_validation
 
-from .tools import Tool, ToolError, ToolRegistry
+from .tools import Permission, RiskLevel, Tool, ToolError, ToolRegistry
 from .workspace import Workspace
 
 
@@ -30,5 +30,9 @@ def register_validation_tools(registry: ToolRegistry, workspace: Workspace) -> N
                 "additionalProperties": False,
             },
             handler=detect,
+            permission=Permission.READ_FILES,
+            risk_level=RiskLevel.READ_ONLY,
+            timeout_seconds=10,
+            max_output_bytes=30_000,
         )
     )

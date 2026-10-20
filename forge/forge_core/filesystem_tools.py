@@ -1,50 +1,47 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
+from contextlib import ExitStack
+from pathlib import Path
 from typing import Final
 
-from .tools import Tool, ToolError, ToolRegistry
-from .workspace import Workspace
+from .safe_io import SafeReadError, open_read_file_beneath
+from .tools import Permission, RiskLevel, Tool, ToolError, ToolRegistry
+from .workspace import Workspace, WorkspaceError
 
-IGNORED_PARTS: Final = frozenset({".git", ".venv", "__pycache__", "node_modules", ".forge"})
+MAX_SEARCH_FILES: Final = 64
+SEARCH_ENVIRONMENT: Final = {
+    "HOME": "/nonexistent",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "NO_COLOR": "1",
+    "PATH": os.defpath,
+}
 
 
 def register_filesystem_tools(registry: ToolRegistry, workspace: Workspace) -> None:
     def list_files(path: str = ".", recursive: bool = False) -> str:
-        directory = workspace.resolve(path)
+        directory = workspace.resolve_for_context(path)
         if not directory.exists():
             raise ToolError(f"Path does not exist: {path}")
         if not directory.is_dir():
             raise ToolError(f"Not a directory: {path}")
 
-        if recursive:
-            paths = [
-                item
-                for item in directory.rglob("*")
-                if not any(part in IGNORED_PARTS for part in item.parts)
-            ]
-        else:
-            paths = [item for item in directory.iterdir() if item.name not in IGNORED_PARTS]
-
         lines: list[str] = []
+        paths = directory.rglob("*") if recursive else directory.iterdir()
         for item in sorted(paths):
             relative = item.relative_to(workspace.root)
-            lines.append(f"{relative}/" if item.is_dir() else str(relative))
+            try:
+                visible_item = workspace.resolve_for_context(str(relative))
+            except WorkspaceError:
+                continue
+            lines.append(f"{relative}/" if visible_item.is_dir() else str(relative))
         return "\n".join(lines) or "Directory is empty."
 
     def read_file(path: str, start_line: int = 1, end_line: int | None = None) -> str:
-        file_path = workspace.resolve(path)
-        if not file_path.exists():
-            raise ToolError(f"File does not exist: {path}")
-        if not file_path.is_file():
-            raise ToolError(f"Not a file: {path}")
-        if file_path.stat().st_size > 1_000_000:
-            raise ToolError("File is larger than 1 MB.")
-
-        try:
-            lines = file_path.read_text(encoding="utf-8").splitlines()
-        except UnicodeDecodeError as error:
-            raise ToolError("Forge cannot read this binary file.") from error
+        lines = workspace.read_text(path).splitlines()
 
         start = max(start_line - 1, 0)
         stop = end_line if end_line is not None else len(lines)
@@ -56,56 +53,63 @@ def register_filesystem_tools(registry: ToolRegistry, workspace: Workspace) -> N
         return "\n".join(numbered) or "No content in this range."
 
     def search_files(query: str, path: str = ".") -> str:
-        directory = workspace.resolve(path)
+        directory = workspace.resolve_for_context(path)
         if not directory.exists():
             raise ToolError(f"Path does not exist: {path}")
 
-        command = [
-            "rg",
-            "--line-number",
-            "--hidden",
-            "--glob",
-            "!.git/**",
-            "--glob",
-            "!.venv/**",
-            "--glob",
-            "!node_modules/**",
-            "--glob",
-            "!.forge/**",
-            query,
-            str(directory),
-        ]
-        try:
-            result = subprocess.run(
-                command,
-                cwd=workspace.root,
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-        except FileNotFoundError as error:
+        candidates = _context_files(workspace, directory)
+        if not candidates:
+            return "No matches found."
+        if len(candidates) > MAX_SEARCH_FILES:
             raise ToolError(
-                "ripgrep is not installed. Install it with your package manager."
-            ) from error
+                f"Search includes more than {MAX_SEARCH_FILES} files; request a narrower path."
+            )
+        ripgrep = shutil.which("rg", path=os.defpath)
+        if ripgrep is None:
+            raise ToolError("ripgrep is not installed in a trusted system location.")
+
+        with ExitStack() as stack:
+            descriptors: list[int] = []
+            aliases: dict[str, str] = {}
+            for candidate in candidates:
+                try:
+                    descriptor = open_read_file_beneath(workspace.root, candidate)
+                except SafeReadError:
+                    continue
+                stack.callback(os.close, descriptor)
+                descriptor_path = f"/proc/self/fd/{descriptor}"
+                descriptors.append(descriptor)
+                aliases[descriptor_path] = str(candidate.relative_to(workspace.root))
+            if not descriptors:
+                return "No matches found."
+            command = [
+                ripgrep,
+                "--line-number",
+                "--with-filename",
+                "--max-columns=500",
+                "--max-count=20",
+                query,
+                *aliases,
+            ]
+            try:
+                result = subprocess.run(
+                    command,
+                    cwd=workspace.root,
+                    capture_output=True,
+                    env=SEARCH_ENVIRONMENT,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                    pass_fds=tuple(descriptors),
+                )
+            except FileNotFoundError as error:
+                raise ToolError("Trusted ripgrep executable became unavailable.") from error
 
         if result.returncode == 1:
             return "No matches found."
         if result.returncode != 0:
             raise ToolError(result.stderr.strip())
-        return result.stdout.strip()[:30_000]
-
-    def write_file(path: str, content: str) -> str:
-        file_path = workspace.resolve(path)
-        if len(content.encode("utf-8")) > 1_000_000:
-            raise ToolError("File content exceeds 1 MB limit.")
-
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        existed_before = file_path.exists()
-        file_path.write_text(content, encoding="utf-8")
-        action = "Updated" if existed_before else "Created"
-        relative = file_path.relative_to(workspace.root)
-        return f"{action} {relative}"
+        return _restore_search_paths(result.stdout.strip(), aliases)
 
     registry.register(
         Tool(
@@ -128,6 +132,10 @@ def register_filesystem_tools(registry: ToolRegistry, workspace: Workspace) -> N
                 "additionalProperties": False,
             },
             handler=list_files,
+            permission=Permission.READ_FILES,
+            risk_level=RiskLevel.READ_ONLY,
+            timeout_seconds=10,
+            max_output_bytes=30_000,
         )
     )
     registry.register(
@@ -149,6 +157,10 @@ def register_filesystem_tools(registry: ToolRegistry, workspace: Workspace) -> N
                 "additionalProperties": False,
             },
             handler=read_file,
+            permission=Permission.READ_FILES,
+            risk_level=RiskLevel.READ_ONLY,
+            timeout_seconds=10,
+            max_output_bytes=30_000,
         )
     )
     registry.register(
@@ -165,22 +177,33 @@ def register_filesystem_tools(registry: ToolRegistry, workspace: Workspace) -> N
                 "additionalProperties": False,
             },
             handler=search_files,
+            permission=Permission.SEARCH_FILES,
+            risk_level=RiskLevel.READ_ONLY,
+            timeout_seconds=10,
+            max_output_bytes=30_000,
         )
     )
-    registry.register(
-        Tool(
-            name="write_file",
-            description=(
-                "Create or completely replace a text file. "
-                "Use only after examining relevant existing files."
-            ),
-            parameters={
-                "type": "object",
-                "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
-                "required": ["path", "content"],
-                "additionalProperties": False,
-            },
-            handler=write_file,
-            requires_approval=True,
-        )
-    )
+
+
+def _context_files(workspace: Workspace, path: Path) -> list[Path]:
+    if path.is_file():
+        return [path]
+
+    files: list[Path] = []
+    for item in path.rglob("*"):
+        relative = item.relative_to(workspace.root)
+        try:
+            visible_item = workspace.resolve_for_context(str(relative))
+        except WorkspaceError:
+            continue
+        if visible_item.is_file():
+            files.append(visible_item)
+    return files
+
+
+def _restore_search_paths(output: str, aliases: dict[str, str]) -> str:
+    lines: list[str] = []
+    for line in output.splitlines():
+        source, separator, match = line.partition(":")
+        lines.append(f"{aliases.get(source, source)}{separator}{match}")
+    return "\n".join(lines)

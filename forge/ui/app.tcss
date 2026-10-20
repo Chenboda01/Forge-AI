@@ -40,6 +40,40 @@ Screen {
 #shell {
     width: 100%;
     height: 100%;
+    layout: vertical;
+}
+
+#header, #footer {
+    width: 100%;
+    height: 1;
+    box-sizing: content-box;
+    background: $surface-rail;
+    color: $text-secondary;
+    text-style: dim;
+}
+
+#header {
+    border-bottom: solid $border-subtle;
+}
+
+#footer {
+    border-top: solid $border-subtle;
+}
+
+#header-left, #footer-left {
+    width: 1fr;
+    padding: 0 1;
+}
+
+#header-right, #footer-right {
+    width: auto;
+    padding: 0 1;
+    color: $text-muted;
+}
+
+#body {
+    width: 100%;
+    height: 1fr;
     layout: horizontal;
 }
 
@@ -71,36 +105,37 @@ Screen {
     width: 100%;
     height: auto;
     margin-bottom: 2;
+    padding-left: 2;
     color: $text-primary;
 }
 
 .message-user {
-    border-left: tall $text-secondary;
-    padding-left: 2;
+    background: $surface-elevated;
+    border-left: thick $text-secondary;
 }
 
 .message-forge {
-    border-left: tall $accent-primary;
-    padding-left: 2;
+    border-left: thick $accent-primary;
 }
 
 .message-tool {
     color: $status-info;
-    padding-left: 2;
+}
+
+.message-notice {
+    color: $text-secondary;
 }
 
 .message-error {
     color: $status-error;
-    border-left: tall $status-error;
-    padding-left: 2;
+    border-left: thick $status-error;
 }
 
 #composer {
     width: 100%;
-    height: 5;
-    border: none;
-    border-top: solid $border-subtle;
-    padding: 0 2;
+    height: 4;
+    border: round $border-subtle;
+    padding: 0 1;
     background: $surface-main;
     color: $text-primary;
 }
@@ -126,7 +161,7 @@ Screen {
 }
 
 #composer:focus {
-    border-top: solid $accent-active;
+    border: round $accent-active;
     background: $surface-elevated;
 }
 
@@ -259,4 +294,56 @@ ThemeSelectScreen {
 
 #theme-dialog Button:focus {
     border: solid $accent-active;
+}
+
+ModelSelectScreen,
+CommandPaletteScreen {
+    align: center middle;
+    background: $surface-canvas 70%;
+}
+
+#model-dialog {
+    width: 84;
+    max-width: 95%;
+    height: auto;
+    max-height: 85%;
+    padding: 2;
+    background: $surface-elevated;
+    border: solid $accent-primary;
+}
+
+#palette-dialog {
+    width: 72;
+    max-width: 95%;
+    height: auto;
+    max-height: 85%;
+    padding: 2;
+    background: $surface-elevated;
+    border: solid $accent-primary;
+}
+
+#model-title,
+#palette-title {
+    height: 2;
+    color: $accent-active;
+    text-style: bold;
+}
+
+#model-subtitle,
+#palette-subtitle {
+    height: 2;
+    color: $text-secondary;
+    margin-bottom: 1;
+}
+
+#model-filter,
+#palette-filter {
+    margin-bottom: 1;
+}
+
+#model-options,
+#palette-options {
+    height: auto;
+    max-height: 20;
+    background: $surface-elevated;
 }

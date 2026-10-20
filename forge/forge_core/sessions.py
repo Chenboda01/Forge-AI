@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,9 +8,19 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from forge.sessions import SessionMessageRecord, SessionSnapshot, SessionStore
+from forge.sessions import SessionMessageRecord, SessionSnapshot, SessionStorageError, SessionStore
+from forge.sessions.storage import SESSION_ID
 
 from .redaction import redact_text
+from .safe_io import (
+    SafeReadError,
+    SafeWriteError,
+    atomic_write_text_beneath,
+    ensure_directory_beneath,
+    read_bytes_beneath,
+)
+
+MAX_SESSION_BYTES = 10_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,11 +48,13 @@ class ResumeData:
 
 class SessionManager:
     def __init__(self, root: Path | None = None):
-        project_root = root or Path.cwd()
-        self.root = project_root / ".forge" / "sessions"
-        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.root.chmod(0o700)
-        self.snapshots = SessionStore(project_root)
+        self.project_root = (root or Path.cwd()).resolve()
+        self.root = self.project_root / ".forge" / "sessions"
+        try:
+            ensure_directory_beneath(self.project_root, self.root)
+        except SafeWriteError as error:
+            raise SessionStorageError("Forge state directory changed during access.") from error
+        self.snapshots = SessionStore(self.project_root)
 
     def save_snapshot(self, snapshot: SessionSnapshot) -> None:
         self.snapshots.save(snapshot)
@@ -91,32 +102,40 @@ class SessionManager:
         }
 
         filepath = self.root / f"{session_id}.json"
-        temporary = self.root / f".{session_id}.{uuid4().hex}.tmp"
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                stream.write(redact_text(json.dumps(data, indent=2)))
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, filepath)
-        except OSError:
-            temporary.unlink(missing_ok=True)
-            raise
+            atomic_write_text_beneath(
+                self.project_root,
+                filepath,
+                redact_text(json.dumps(data, indent=2)),
+            )
+        except SafeWriteError as error:
+            raise SessionStorageError(f"Session changed during access: {session_id}") from error
 
         return meta
 
     def load(self, session_id: str) -> dict[str, Any] | None:
-        filepath = self.root / f"{session_id}.json"
+        filepath = self._session_path(session_id)
+        if filepath is None:
+            return None
         if not filepath.exists():
             return None
-        return json.loads(filepath.read_text(encoding="utf-8"))
+        try:
+            return json.loads(
+                read_bytes_beneath(self.root, filepath, max_bytes=MAX_SESSION_BYTES).decode("utf-8")
+            )
+        except (SafeReadError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
 
     def resume_data(self, session_id: str) -> ResumeData | None:
-        filepath = self.root / f"{session_id}.json"
+        filepath = self._session_path(session_id)
+        if filepath is None:
+            return None
         if not filepath.is_file():
             return None
         try:
-            payload = json.loads(filepath.read_text(encoding="utf-8"))
+            payload = json.loads(
+                read_bytes_beneath(self.root, filepath, max_bytes=MAX_SESSION_BYTES).decode("utf-8")
+            )
             if "task" in payload:
                 snapshot = self.snapshots.load(session_id)
                 if snapshot is None:
@@ -144,16 +163,35 @@ class SessionManager:
                 meta.get("input_tokens", 0),
                 meta.get("output_tokens", 0),
             )
-        except (json.JSONDecodeError, KeyError, TypeError):
+        except (SafeReadError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
             return None
+
+    def _session_path(self, session_id: str) -> Path | None:
+        if SESSION_ID.fullmatch(session_id) is None:
+            return None
+        path = self.root / f"{session_id}.json"
+        try:
+            path.resolve().relative_to(self.root)
+        except ValueError:
+            return None
+        return path
 
     def list_sessions(self) -> list[SessionMeta]:
         sessions: list[SessionMeta] = []
         for fp in sorted(self.root.glob("*.json"), reverse=True):
+            filepath = self._session_path(fp.stem)
+            if filepath is None:
+                continue
             try:
-                data = json.loads(fp.read_text(encoding="utf-8"))
+                data = json.loads(
+                    read_bytes_beneath(
+                        self.root,
+                        filepath,
+                        max_bytes=MAX_SESSION_BYTES,
+                    ).decode("utf-8")
+                )
                 if "task" in data:
-                    snapshot = self.snapshots.load(fp.stem)
+                    snapshot = self.snapshots.load(filepath.stem)
                     if snapshot is None:
                         continue
                     sessions.append(
@@ -182,7 +220,7 @@ class SessionManager:
                         output_tokens=m.get("output_tokens", 0),
                     )
                 )
-            except (json.JSONDecodeError, KeyError):
+            except (SafeReadError, UnicodeDecodeError, json.JSONDecodeError, KeyError):
                 continue
         return sessions
 

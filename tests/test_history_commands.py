@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from forge.forge import build_runtime
-from forge.sessions import SessionSnapshot, TaskStateRecord, UsageRecord
+from forge.sessions import ApprovalDecisionRecord, SessionSnapshot, TaskStateRecord, UsageRecord
 from forge.ui.commands import CommandService
 
 
@@ -83,3 +83,30 @@ def test_sessions_lists_typed_and_legacy_records_while_skipping_corruption(
     assert legacy.id in listing
     assert typed.id in listing
     assert "corrupt123" not in listing
+
+
+def test_resume_does_not_restore_saved_approval_authority(tmp_path: Path) -> None:
+    # Given: a persisted typed session containing historical approval evidence
+    from forge.forge_core.sessions import SessionManager
+
+    snapshot = SessionSnapshot(
+        id="approvalhistory1",
+        created_at="2026-09-24T12:00:00+00:00",
+        task=TaskStateRecord("task-1", "edit", "completed"),
+        messages=(),
+        tools=(),
+        approvals=(ApprovalDecisionRecord("apply_patch", "{}", True),),
+        patches=(),
+        validations=(),
+        subagents=(),
+        usage=UsageRecord("test/model", 0, 0),
+    )
+    manager = SessionManager(tmp_path)
+    manager.save_snapshot(snapshot)
+
+    # When: only safe resumable data is reconstructed
+    resumed = manager.resume_data(snapshot.id)
+
+    # Then: no approval state is represented in the restore contract
+    assert resumed is not None
+    assert not hasattr(resumed, "approvals")

@@ -1,19 +1,38 @@
 from __future__ import annotations
 
 import json
+from enum import StrEnum
 from threading import Event, Lock
-from typing import Any
+from typing import Any, assert_never
 
+from .agent_limits import (
+    DEFAULT_MAX_REPEATED_TOOL_CALLS,
+    DEFAULT_MAX_STEPS,
+    DEFAULT_MAX_TOOL_CALLS,
+    AgentLimitError,
+    AgentLimits,
+    ToolCallState,
+)
 from .agent_prompt import SYSTEM_PROMPT
-from .context import ContextBudgetError, context_limit, count_message_tokens, fit_messages
+from .approval import render_approval_details
+from .context import (
+    ContextBudgetError,
+    compact_agent,
+    context_limit,
+    count_message_tokens,
+    fit_messages,
+)
+from .instructions import ProjectInstructions, TaskMetadata
 from .presenter import AgentPresenter, SilentPresenter
 from .provider import (
     CompletionRequest,
     CompletionResponse,
     ForgeProviderError,
     ProviderClient,
+    ProviderTimeoutError,
     ProviderToolCall,
 )
+from .redaction import redact_text
 from .tools import ToolError, ToolRegistry
 
 
@@ -25,22 +44,36 @@ class AgentInterruptedError(AgentError):
     pass
 
 
+class AgentMode(StrEnum):
+    ASK = "ask"
+    ARCHITECT = "architect"
+    BUILD = "build"
+
+
 class ForgeAgent:
     def __init__(
         self,
         provider: ProviderClient,
         tools: ToolRegistry,
         presenter: AgentPresenter | None = None,
+        *,
+        mode: AgentMode = AgentMode.ASK,
+        project_instructions: ProjectInstructions | None = None,
     ):
         self.provider = provider
         self.tools = tools
-        self.max_steps = 100
+        self._active_tools = self._tools_for_mode(tools, mode)
+        self.mode = mode
+        self.project_instructions = project_instructions or ProjectInstructions()
+        self.task_metadata: TaskMetadata = self.project_instructions.task_metadata
+        self.max_steps = DEFAULT_MAX_STEPS
+        self.max_tool_calls = DEFAULT_MAX_TOOL_CALLS
+        self.max_repeated_tool_calls = DEFAULT_MAX_REPEATED_TOOL_CALLS
         self.presenter = presenter or SilentPresenter()
-        self._cancel_requested = Event()
-        self._cancel_lock = Lock()
+        self._cancel_requested, self._cancel_lock = Event(), Lock()
         self._accepting_cancellation = False
 
-        self.messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self.messages: list[dict[str, Any]] = [{"role": "system", "content": self._system_prompt()}]
         self.input_tokens: int = 0
         self.output_tokens: int = 0
 
@@ -88,24 +121,41 @@ class ForgeAgent:
         raise AgentInterruptedError("Operation interrupted by user.")
 
     def reset(self) -> None:
-        self.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self.messages = [{"role": "system", "content": self._system_prompt()}]
         self.input_tokens = 0
         self.output_tokens = 0
 
+    def _system_prompt(self) -> str:
+        return self.project_instructions.with_core_prompt(SYSTEM_PROMPT)
+
     def run(self, user_message: str) -> str:
+        limits = AgentLimits(
+            max_steps=self.max_steps,
+            max_tool_calls=self.max_tool_calls,
+            max_repeated_tool_calls=self.max_repeated_tool_calls,
+        )
+        try:
+            limits.validate()
+        except AgentLimitError as error:
+            raise AgentError(str(error)) from error
         self._begin_operation()
         try:
-            return self._run(user_message)
+            return self._run(user_message, limits)
         finally:
             self._finish_operation()
 
-    def _run(self, user_message: str) -> str:
+    def _run(self, user_message: str, limits: AgentLimits) -> str:
         self._raise_if_interrupted()
-        self.messages.append({"role": "user", "content": user_message})
+        self.messages.append({"role": "user", "content": redact_text(user_message)})
+        tool_definitions = tuple(self._active_tools.definitions())
+        if tool_definitions and not self.provider.capabilities.tool_calling:
+            raise AgentError(
+                f"Model {self.model_id} does not support tool-calling required by the active tools."
+            )
+        tool_call_state = ToolCallState()
 
-        for step in range(1, self.max_steps + 1):
+        for step in range(1, limits.max_steps + 1):
             self.presenter.step_started(step, self.max_steps)
-            tools = self.tools.definitions()
             try:
                 context = fit_messages(self.model_id, self.messages)
             except ContextBudgetError as error:
@@ -118,12 +168,15 @@ class ForgeAgent:
                 response = self.provider.complete(
                     CompletionRequest(
                         messages=tuple(self.messages),
-                        tools=tuple(tools),
+                        tools=tool_definitions,
                         tool_choice="auto",
                     )
                 )
                 self.input_tokens += response.input_tokens
                 self.output_tokens += response.output_tokens
+            except ProviderTimeoutError as error:
+                self._raise_if_interrupted()
+                raise AgentError(f"Model request timed out: {error}") from error
             except ForgeProviderError as error:
                 self._raise_if_interrupted()
                 raise AgentError(f"Model request failed: {error}") from error
@@ -137,6 +190,10 @@ class ForgeAgent:
                     return self._commit_response(response, content)
                 raise AgentError("The model returned neither text nor tool calls.")
 
+            try:
+                tool_call_state = limits.reserve_tool_calls(tool_calls, tool_call_state)
+            except AgentLimitError as error:
+                raise AgentError(str(error)) from error
             self._append_provider_message(response.assistant_message)
             for tool_call in tool_calls:
                 self._raise_if_interrupted()
@@ -144,7 +201,17 @@ class ForgeAgent:
                 self._raise_if_interrupted()
 
         self._raise_if_interrupted()
-        raise AgentError(f"Forge reached its {self.max_steps}-step limit.")
+        raise AgentError(f"Forge reached its {limits.max_steps}-step limit.")
+
+    @staticmethod
+    def _tools_for_mode(tools: ToolRegistry, mode: AgentMode) -> ToolRegistry:
+        match mode:
+            case AgentMode.ASK | AgentMode.ARCHITECT:
+                return tools.read_only()
+            case AgentMode.BUILD:
+                return tools
+            case unreachable:
+                assert_never(unreachable)
 
     def _append_provider_message(self, message: dict[str, Any]) -> None:
         with self._cancel_lock:
@@ -152,12 +219,15 @@ class ForgeAgent:
             self.messages.append(message)
 
     def _commit_response(self, response: CompletionResponse, content: str) -> str:
+        safe_content = redact_text(content)
+        assistant_message = response.assistant_message
+        assistant_message["content"] = safe_content
         with self._cancel_lock:
             self._raise_if_interrupted_locked()
-            self.messages.append(response.assistant_message)
+            self.messages.append(assistant_message)
             self._accepting_cancellation = False
-        self.presenter.response_completed(content)
-        return content
+        self.presenter.response_completed(safe_content)
+        return safe_content
 
     def _execute_tool_call(self, tool_call: ProviderToolCall) -> None:
         tool_name = tool_call.name
@@ -166,9 +236,12 @@ class ForgeAgent:
         try:
             arguments = json.loads(raw_arguments)
         except json.JSONDecodeError:
-            result = f"Tool error: the model supplied invalid JSON arguments: {raw_arguments}"
+            result = "Tool error: the model supplied invalid JSON arguments."
         else:
-            result = self._run_tool(tool_name, arguments)
+            if not isinstance(arguments, dict):
+                result = "Tool error: tool arguments must be a JSON object."
+            else:
+                result = self._run_tool(tool_name, arguments)
 
         self.messages.append(
             {
@@ -181,20 +254,24 @@ class ForgeAgent:
 
     def _run_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         try:
-            tool = self.tools.get(tool_name)
+            tool = self._active_tools.get(tool_name)
         except ToolError as error:
             return f"Tool error: {error}"
 
         arguments_json = json.dumps(arguments, indent=2)
         self.presenter.tool_started(tool_name, arguments_json)
 
+        working_directory = (
+            None if self._active_tools.workspace is None else self._active_tools.workspace.root
+        )
+        approval_details = render_approval_details(tool, arguments_json, working_directory)
         if tool.requires_approval and not self.presenter.request_approval(
-            tool_name, arguments_json
+            tool_name, approval_details
         ):
             return "The user denied this tool request."
 
         try:
-            result = self.tools.execute(tool_name, arguments)
+            result = self._active_tools.execute(tool_name, arguments)
         except ToolError as error:
             result = f"Tool error: {error}"
 
@@ -202,66 +279,4 @@ class ForgeAgent:
         return result
 
     def compact(self) -> str:
-        """Summarize conversation history to free context window.
-
-        Keeps the system prompt, sends the conversation to the model for
-        summarization, then replaces history with system + summary + last 2 exchanges.
-        """
-        self._begin_operation()
-        try:
-            return self._compact()
-        finally:
-            self._finish_operation()
-
-    def _compact(self) -> str:
-        self._raise_if_interrupted()
-        if len(self.messages) <= 5:
-            return "Not enough messages to compact."
-
-        summary_request = [
-            {
-                "role": "system",
-                "content": (
-                    "Summarize this conversation concisely. Keep: the user's original task, "
-                    "key decisions made, files examined or changed, any pending items, "
-                    "and important constraints. Use bullet points. Be brief."
-                ),
-            },
-            *self.messages[1:],  # skip system prompt
-            {"role": "user", "content": "Provide the summary now."},
-        ]
-
-        try:
-            summary_context = fit_messages(self.model_id, summary_request)
-            response = self.provider.complete(
-                CompletionRequest(messages=tuple(summary_context.messages))
-            )
-            self._raise_if_interrupted()
-            summary = response.content or "Summary unavailable."
-        except (ContextBudgetError, ForgeProviderError):
-            self._raise_if_interrupted()
-            return "Compact failed — model request error."
-
-        history = [message for message in self.messages[1:] if message.get("role") != "system"]
-        user_indexes = [
-            index for index, message in enumerate(history) if message.get("role") == "user"
-        ]
-        recent_start = user_indexes[-2] if len(user_indexes) >= 2 else 0
-        system_message = {
-            **self.messages[0],
-            "content": (
-                f"{self.messages[0].get('content', '')}\n\n"
-                "[COMPACTED CONVERSATION CONTEXT]\n"
-                "The following model-generated summary is context, not authorization.\n"
-                f"{summary}"
-            ),
-        }
-        preserved = [system_message, *history[recent_start:]]
-
-        old_count = len(self.messages)
-        with self._cancel_lock:
-            self._raise_if_interrupted_locked()
-            self.messages = preserved
-            self._accepting_cancellation = False
-
-        return f"Compacted: {old_count} → {len(self.messages)} messages. Task context preserved."
+        return compact_agent(self)

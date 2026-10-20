@@ -6,12 +6,15 @@ from datetime import date, datetime, time
 from pathlib import Path, PurePosixPath
 from typing import assert_never
 
+from forge.forge_core.safe_io import SafeReadError, is_regular_file_beneath, read_bytes_beneath
+
 from .models import ValidationCommand, ValidationDetectionError, ValidationKind
 
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 type TomlValue = (
     str | int | float | bool | date | datetime | time | list[TomlValue] | dict[str, TomlValue]
 )
+MAX_VALIDATION_CONFIG_BYTES = 1_000_000
 
 
 def detect_validation(
@@ -21,14 +24,14 @@ def detect_validation(
     project_root = root.resolve()
     commands: list[ValidationCommand] = []
     pyproject = project_root / "pyproject.toml"
-    if pyproject.is_file():
+    if _is_project_file(project_root, pyproject):
         commands.extend(_python_commands(project_root, pyproject, changed_files))
     package = project_root / "package.json"
-    if package.is_file():
+    if _is_project_file(project_root, package):
         commands.extend(_node_commands(project_root, package))
     cargo = project_root / "Cargo.toml"
-    if cargo.is_file():
-        _load_toml(cargo)
+    if _is_project_file(project_root, cargo):
+        _load_toml(project_root, cargo)
         commands.extend(
             (
                 ValidationCommand(("cargo", "test"), ValidationKind.TEST, cargo.name),
@@ -55,7 +58,7 @@ def _python_commands(
     pyproject: Path,
     changed_files: tuple[str, ...],
 ) -> tuple[ValidationCommand, ...]:
-    config = _load_toml(pyproject)
+    config = _load_toml(root, pyproject)
     tools = _toml_table(config.get("tool"), pyproject.name, "tool")
 
     commands: list[ValidationCommand] = []
@@ -105,8 +108,10 @@ def _targeted_python_test(root: Path, changed_files: tuple[str, ...]) -> str | N
 
 def _node_commands(root: Path, package: Path) -> tuple[ValidationCommand, ...]:
     try:
-        payload: JsonValue = json.loads(package.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        payload: JsonValue = json.loads(
+            read_bytes_beneath(root, package, max_bytes=MAX_VALIDATION_CONFIG_BYTES).decode("utf-8")
+        )
+    except (SafeReadError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValidationDetectionError(package.name, str(error)) from error
     configured = _node_scripts(payload, package.name)
 
@@ -133,11 +138,13 @@ def _node_commands(root: Path, package: Path) -> tuple[ValidationCommand, ...]:
 
 
 def _node_manager(root: Path) -> str:
-    if (root / "bun.lock").is_file() or (root / "bun.lockb").is_file():
+    if _is_optional_project_file(root, root / "bun.lock") or _is_optional_project_file(
+        root, root / "bun.lockb"
+    ):
         return "bun"
-    if (root / "pnpm-lock.yaml").is_file():
+    if _is_optional_project_file(root, root / "pnpm-lock.yaml"):
         return "pnpm"
-    if (root / "yarn.lock").is_file():
+    if _is_optional_project_file(root, root / "yarn.lock"):
         return "yarn"
     return "npm"
 
@@ -176,9 +183,24 @@ def _toml_table(value: TomlValue | None, source: str, name: str) -> dict[str, To
             assert_never(unreachable)
 
 
-def _load_toml(path: Path) -> dict[str, TomlValue]:
+def _load_toml(root: Path, path: Path) -> dict[str, TomlValue]:
     try:
-        with path.open("rb") as stream:
-            return tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as error:
+        return tomllib.loads(
+            read_bytes_beneath(root, path, max_bytes=MAX_VALIDATION_CONFIG_BYTES).decode("utf-8")
+        )
+    except (SafeReadError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
         raise ValidationDetectionError(path.name, str(error)) from error
+
+
+def _is_project_file(root: Path, path: Path) -> bool:
+    try:
+        return is_regular_file_beneath(root, path)
+    except SafeReadError as error:
+        raise ValidationDetectionError(path.name, str(error)) from error
+
+
+def _is_optional_project_file(root: Path, path: Path) -> bool:
+    try:
+        return is_regular_file_beneath(root, path)
+    except SafeReadError:
+        return False

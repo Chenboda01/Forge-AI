@@ -1,6 +1,7 @@
 import pytest
 
 from forge.forge_core.config import get_api_key, get_default_model
+from forge.forge_core.redaction import redact_text
 
 
 def test_get_api_key_returns_none_for_none():
@@ -19,6 +20,22 @@ def test_get_api_key_returns_value(monkeypatch: pytest.MonkeyPatch):
 def test_get_api_key_strips_whitespace(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("TEST_API_KEY", "  sk-test-not-real  ")
     assert get_api_key("TEST_API_KEY") == "sk-test-not-real"
+
+
+def test_environment_api_key_is_registered_for_value_based_redaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: an arbitrary credential with no provider-specific prefix
+    secret = "opaque-test-credential-value"
+    monkeypatch.setenv("TEST_API_KEY", secret)
+
+    # When: Forge resolves the credential and later sanitizes output
+    assert get_api_key("TEST_API_KEY") == secret
+    rendered = redact_text(f"provider rejected credential {secret}")
+
+    # Then: the exact configured value is removed regardless of its shape
+    assert secret not in rendered
+    assert "[REDACTED]" in rendered
 
 
 def test_get_default_model_returns_default(monkeypatch: pytest.MonkeyPatch):

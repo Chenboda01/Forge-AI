@@ -1,5 +1,5 @@
 from .subagents import SUBAGENTS, SubagentError, SubagentRunner
-from .tools import Tool, ToolRegistry
+from .tools import Permission, RiskLevel, Tool, ToolRegistry
 
 
 def register_delegation_tool(registry: ToolRegistry, runner: SubagentRunner) -> None:
@@ -48,5 +48,9 @@ def register_delegation_tool(registry: ToolRegistry, runner: SubagentRunner) -> 
             },
             handler=delegate_task,
             requires_approval=False,
+            permission=Permission.DELEGATE,
+            risk_level=RiskLevel.LOW,
+            timeout_seconds=60,
+            max_output_bytes=30_000,
         )
     )

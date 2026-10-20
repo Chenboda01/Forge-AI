@@ -6,10 +6,12 @@ import shutil
 import signal
 import subprocess
 from collections.abc import Callable
+from contextlib import suppress
 from pathlib import Path
 from time import monotonic
 from typing import Final
 
+from forge.forge_core.safe_io import SafeWriteError, ensure_directory_beneath
 from forge.forge_core.workspace import Workspace, WorkspaceError
 
 from .models import (
@@ -22,6 +24,11 @@ from .models import (
 )
 
 type Validator = Callable[[tuple[str, ...], Path], None]
+TRUSTED_EXECUTABLE_DIRECTORIES: Final = (
+    Path("/usr/local/bin"),
+    Path("/usr/bin"),
+    Path("/bin"),
+)
 
 EXACT_COMMANDS: Final = frozenset(
     {
@@ -77,8 +84,10 @@ class RestrictedCommandRunner:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
         self.runtime_home = self.root / ".forge" / "runtime-home"
-        self.runtime_home.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.runtime_home.chmod(0o700)
+        try:
+            ensure_directory_beneath(self.root, self.runtime_home)
+        except SafeWriteError as error:
+            raise CommandExecutionError("Forge runtime state changed during access.") from error
 
     def run(self, request: CommandRequest) -> CommandExecutionResult:
         classification = classify_command(request.arguments, self.root)
@@ -137,46 +146,45 @@ class RestrictedCommandRunner:
         output_bytes = 0
         timed_out = False
         stream_open = True
-        while stream_open:
-            remaining = deadline - monotonic()
-            if remaining <= 0 and process.poll() is None:
-                os.killpg(process.pid, signal.SIGKILL)
-                timed_out = True
-            events = selector.select(timeout=max(min(remaining, 0.05), 0))
-            for key, _mask in events:
-                chunk = os.read(key.fd, 8192)
-                if not chunk:
-                    selector.unregister(stdout)
-                    stream_open = False
-                    break
-                output_bytes += len(chunk)
-                available = request.output_limit_bytes - len(retained)
-                if available > 0:
-                    retained.extend(chunk[:available])
-            if process.poll() is not None and not events:
-                chunk = os.read(stdout.fileno(), 8192)
-                if chunk:
+        try:
+            while stream_open:
+                remaining = deadline - monotonic()
+                if remaining <= 0 and not timed_out:
+                    with suppress(ProcessLookupError):
+                        os.killpg(process.pid, signal.SIGKILL)
+                    timed_out = True
+                events = selector.select(timeout=max(min(remaining, 0.05), 0))
+                for key, _mask in events:
+                    chunk = os.read(key.fd, 8192)
+                    if not chunk:
+                        selector.unregister(stdout)
+                        stream_open = False
+                        break
                     output_bytes += len(chunk)
                     available = request.output_limit_bytes - len(retained)
                     if available > 0:
                         retained.extend(chunk[:available])
-                else:
-                    stream_open = False
-        selector.close()
+        finally:
+            selector.close()
+            stdout.close()
         return retained.decode("utf-8", errors="ignore"), output_bytes, timed_out
 
     def _resolve_executable(self, name: str) -> str:
-        local = self.root / ".venv" / "bin" / name
-        if local.is_file():
-            return str(local)
-        executable = shutil.which(name)
-        if executable is None:
-            raise CommandExecutionError(f"Command not found: {name}")
-        return executable
+        candidates = (
+            self.root / ".venv" / "bin" / name,
+            *(directory / name for directory in TRUSTED_EXECUTABLE_DIRECTORIES),
+        )
+        for candidate in candidates:
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        raise CommandExecutionError(f"Command not found in trusted locations: {name}")
 
     def _environment(self) -> dict[str, str]:
         cache = self.runtime_home / "cache"
-        cache.mkdir(exist_ok=True, mode=0o700)
+        try:
+            ensure_directory_beneath(self.root, cache)
+        except SafeWriteError as error:
+            raise CommandExecutionError("Forge runtime state changed during access.") from error
         return {
             "HOME": str(self.runtime_home),
             "LANG": "C.UTF-8",

@@ -109,3 +109,34 @@ def test_detection_tool_displays_commands_without_approval_or_execution(tmp_path
     # Then: exact argument arrays are visible and no approval or execution is implied
     assert '["pytest"]' in output
     assert registry.get("detect_validation").requires_approval is False
+
+
+def test_detection_rejects_external_package_metadata_symlink(tmp_path: Path) -> None:
+    # Given: package metadata redirected outside the project root
+    project = tmp_path / "project"
+    outside = tmp_path / "outside.json"
+    project.mkdir()
+    outside.write_text('{"scripts":{"test":"hostile"}}', encoding="utf-8")
+    (project / "package.json").symlink_to(outside)
+    from forge.validation import ValidationDetectionError, detect_validation
+
+    # When / Then: external metadata cannot select validation commands
+    with pytest.raises(ValidationDetectionError, match="package.json"):
+        detect_validation(project)
+
+
+def test_detection_ignores_external_package_manager_marker(tmp_path: Path) -> None:
+    # Given: valid project metadata and a package-manager lock symlink outside the project
+    project = tmp_path / "project"
+    outside = tmp_path / "outside.lock"
+    project.mkdir()
+    (project / "package.json").write_text('{"scripts":{"test":"test"}}', encoding="utf-8")
+    outside.write_text("external", encoding="utf-8")
+    (project / "bun.lock").symlink_to(outside)
+    from forge.validation import detect_validation
+
+    # When: Forge selects the package-manager command
+    commands = detect_validation(project)
+
+    # Then: an external marker cannot change the executable Forge proposes
+    assert [command.arguments for command in commands] == [("npm", "test")]

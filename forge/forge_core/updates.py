@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Callable
@@ -20,6 +21,16 @@ RELEASE_SOURCE_URL: Final = (
 )
 RELEASE_SOURCE_FALLBACK: Final = "https://chenboda01.github.io/Forge-AI/releases.json"
 UPDATE_TIMEOUT_SECONDS: Final = 120.0
+UPDATE_ENVIRONMENT: Final = {
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "NO_COLOR": "1",
+    "PATH": os.defpath,
+    "PIP_CONFIG_FILE": os.devnull,
+    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+    "PIP_NO_INPUT": "1",
+    "PYTHONNOUSERSITE": "1",
+}
 
 
 class UpdateError(Exception):
@@ -70,7 +81,7 @@ class UpdateService:
 
 
 def fetch_latest_version() -> str:
-    latest: object = None
+    latest: str | None = None
     for attempt, url in enumerate((RELEASE_SOURCE_URL, RELEASE_SOURCE_FALLBACK), start=1):
         request = Request(url, headers={"Accept": "application/json"})
         try:
@@ -95,9 +106,11 @@ def update_command(latest: str) -> tuple[str, ...]:
         sys.executable,
         "-m",
         "pip",
+        "--isolated",
         "install",
         "--upgrade",
-        f"git+https://github.com/Chenboda01/Forge-AI.git@v{latest}",
+        "--only-binary=:all:",
+        f"forge=={latest}",
     )
 
 
@@ -110,6 +123,7 @@ def reinstall_version(latest: str) -> None:
             check=False,
             text=True,
             timeout=UPDATE_TIMEOUT_SECONDS,
+            env=UPDATE_ENVIRONMENT,
         )
     except FileNotFoundError as error:
         raise UpdateError("The selected Forge installer is no longer available.") from error

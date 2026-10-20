@@ -33,26 +33,29 @@ class ValidationCommand:
     targeted: bool = False
 
 
-@dataclass(frozen=True, slots=True)
 class ValidationDetectionError(Exception):
-    source: str
-    detail: str
+    def __init__(self, source: str, detail: str) -> None:
+        self.source = source
+        self.detail = detail
+        super().__init__(source, detail)
 
     def __str__(self) -> str:
         return f"Could not read validation configuration from {self.source}: {self.detail}"
 
 
-@dataclass(frozen=True, slots=True)
 class CommandPolicyError(Exception):
-    detail: str
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(detail)
 
     def __str__(self) -> str:
         return self.detail
 
 
-@dataclass(frozen=True, slots=True)
 class CommandExecutionError(Exception):
-    detail: str
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(detail)
 
     def __str__(self) -> str:
         return self.detail

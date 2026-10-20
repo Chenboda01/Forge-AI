@@ -23,6 +23,13 @@ FORGE_LOGO = (
     "╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝"
 )
 
+MESSAGE_PREFIXES = {
+    "user": "› ",
+    "tool": "· ",
+    "notice": "· ",
+    "error": "✗ ",
+}
+
 
 class StartupBar(Vertical):
     def __init__(self) -> None:
@@ -48,6 +55,65 @@ class EftBanner(Static):
 
     def set_text(self, text: str) -> None:
         self.update(f"EFT: {text}")
+
+
+class HeaderBar(Horizontal):
+    """Full-width top chrome: wordmark, session, and active mode/model."""
+
+    def __init__(self) -> None:
+        super().__init__(id="header")
+
+    def compose(self) -> ComposeResult:
+        yield Static(id="header-left")
+        yield Static(id="header-right")
+
+    def update_status(self, runtime: ForgeRuntime | None, session_name: str) -> None:
+        if runtime is None:
+            mode = "offline"
+            model = "offline"
+            context = 0.0
+            directory = ""
+        else:
+            mode = runtime.agent.mode.value
+            model = runtime.agent.model_id.rsplit("/", maxsplit=1)[-1]
+            context = runtime.agent.context_pct
+            directory = runtime.workspace.name or str(runtime.workspace)
+
+        label = session_name or "untitled"
+        if directory:
+            label = f"{label} \u00b7 {directory}"
+        wordmark = Text()
+        wordmark.append("\u25c6 FORGE", style="bold")
+        wordmark.append(f"   {label}")
+        self.query_one("#header-left", Static).update(wordmark)
+        self.query_one("#header-right", Static).update(
+            f"{mode} \u00b7 {model} \u00b7 ctx {context:.0f}%"
+        )
+
+
+class FooterBar(Horizontal):
+    """Full-width bottom hint bar: keybindings and session usage."""
+
+    def __init__(self) -> None:
+        super().__init__(id="footer")
+
+    def compose(self) -> ComposeResult:
+        yield Static(
+            "enter send \u00b7 shift+enter newline \u00b7 \u2191\u2193 history "
+            "\u00b7 /help commands \u00b7 ctrl+q quit",
+            id="footer-left",
+        )
+        yield Static(id="footer-right")
+
+    def update_status(self, runtime: ForgeRuntime | None) -> None:
+        if runtime is None:
+            self.query_one("#footer-right", Static).update("offline")
+            return
+        cost = estimate_cost(runtime.agent)
+        cost_text = "cost unavailable" if cost is None else f"${cost:.4f}"
+        self.query_one("#footer-right", Static).update(
+            f"{runtime.agent.total_tokens:,} tokens \u00b7 {cost_text}"
+        )
 
 
 class ActivityProgress(Horizontal):
@@ -91,6 +157,7 @@ class ConversationView(VerticalScroll):
     async def append_entry(self, label: str, body: str, kind: str = "notice") -> None:
         self._transcript.append(f"{label}\n{body}")
         text = Text()
+        text.append(MESSAGE_PREFIXES.get(kind, ""))
         text.append(label, style="bold")
         text.append("\n")
         text.append(body)

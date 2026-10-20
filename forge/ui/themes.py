@@ -205,6 +205,23 @@ THEMES = {
         error="#aaaaaa",
         info="#777777",
     ),
+    "opencode": _theme(
+        "opencode",
+        canvas="#0B0E14",
+        main="#0D1017",
+        rail="#0F131A",
+        elevated="#11151C",
+        text="#BFBDB6",
+        secondary="#ACB6BF",
+        muted="#565B66",
+        border="#6C7380",
+        primary="#59C2FF",
+        active="#E6B450",
+        success="#7FD962",
+        warning="#E6B673",
+        error="#D95757",
+        info="#39BAE6",
+    ),
 }
 
 DEFAULT_THEME = "ember"

@@ -167,9 +167,9 @@ def _validate_context(file_patch: FilePatch, workspace: Workspace) -> None:
     if not path.is_file():
         raise _context_mismatch(file_patch.path, "target is not an existing file")
     try:
-        current_lines = path.read_text(encoding="utf-8").splitlines()
-    except UnicodeDecodeError as error:
-        raise _context_mismatch(file_patch.path, "target is not UTF-8 text") from error
+        current_lines = workspace.read_text(file_patch.path).splitlines()
+    except WorkspaceError as error:
+        raise _context_mismatch(file_patch.path, str(error)) from error
 
     previous_end = 0
     for hunk in file_patch.hunks:

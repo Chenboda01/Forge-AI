@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
 class CheckpointError(Exception):
-    detail: str
+    def __init__(self, detail: str) -> None:
+        self.detail = detail
+        super().__init__(detail)
 
     def __str__(self) -> str:
         return self.detail

@@ -12,8 +12,12 @@ dependencies = [
     "litellm>=1.60.0",
     "packaging>=24.0",
     "rich>=13.9.0",
-    "python-dotenv>=1.0.0",
     "textual>=5.0,<8.0",
+    "typer>=0.21,<1",
+    "pydantic-settings>=2.15,<3",
+    "pathspec>=0.12,<1",
+    "jsonschema>=4.23,<5",
+    "keyring>=25,<26",
 ]
 
 [build-system]
@@ -27,7 +31,7 @@ include = ["forge*"]
 forge = ["ui/*.tcss"]
 
 [project.scripts]
-forge = "forge.forge:main"
+forge = "forge.cli:main"
 
 [project.optional-dependencies]
 dev = [
