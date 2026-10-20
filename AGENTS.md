@@ -26,7 +26,7 @@ Do not use a lower-priority instruction to override a higher one.
 
 ## Current State
 
-Forge is in **Phase 0 — Project Foundation**. Implementation code lives under `Forge-AI/`. The root contains architecture and process documentation. The README.md is a design document, not a description of existing behavior — do not assume features described there are implemented.
+Forge is a **pre-release prototype under milestone reconciliation and security hardening**. Implementation code lives under `Forge-AI/`; root documents define policy and architecture. Features are complete only where executable tests and `MILESTONE_AUDIT.md` provide evidence.
 
 Implementation agent = `Forge-AI/`. Documentation root = `/home/boda/Forge/`.
 
@@ -75,6 +75,9 @@ Key invariants from `SECURITY.md`:
 - Restricted files (`.env`, `*.pem`, `*.key`, etc.) must not be sent to cloud providers
 - Commands require timeouts, output limits, and policy checks
 - Provider fallback must not occur silently
+- Repository configuration must not control provider routing
+- Validation output must be redacted before persistence
+- Patch CREATE operations must not overwrite existing files
 - Do not weaken a security check to make a test pass
 
 No real secrets in code, tests, logs, or snapshots. Use `test-api-key`, `sk-test-not-real`, etc.

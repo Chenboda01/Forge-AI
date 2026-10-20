@@ -423,6 +423,14 @@ Final response
 * Provider timeout
 * Context-size guard
 
+### Initial Implementation Defaults
+
+* Primary agent model-step limit defaults to 20 and is bounded to 300.
+* Each user run allows at most 50 tool calls.
+* A canonical tool name and argument set may repeat at most 3 times per run.
+* `ASK` and `ARCHITECT` expose only local, non-mutating, non-network tools.
+* Models without tool-calling support fail before a provider request is sent.
+
 ### Required Modes
 
 Initially:
@@ -1459,4 +1467,3 @@ Feature count
 ```
 
 Forge should become trustworthy before it becomes large.
-

@@ -11,6 +11,8 @@ to the bottom edge while the conversation moves independently beside it.
 
 ### Palette
 
+`ember` remains the default theme. Its tokens are:
+
 | Role | Token | Value | Usage |
 |---|---|---|---|
 | Canvas | `surface-canvas` | `#10100f` | Application background |
@@ -27,6 +29,26 @@ to the bottom edge while the conversation moves independently beside it.
 | Warning | `status-warning` | `#d5a94f` | Context pressure and cautions |
 | Error | `status-error` | `#d9685f` | Failures and destructive actions |
 | Info | `status-info` | `#6f9fba` | Tool activity and neutral notices |
+
+The additional `opencode` palette gives the Textual TUI an opencode-like color
+treatment without replacing the default theme.
+
+| Role | Token | Value |
+|---|---|---|
+| Canvas | `surface-canvas` | `#0B0E14` |
+| Conversation | `surface-main` | `#0D1017` |
+| Sidebar/rail | `surface-rail` | `#0F131A` |
+| Elevated | `surface-elevated` | `#11151C` |
+| Text primary | `text-primary` | `#BFBDB6` |
+| Text secondary | `text-secondary` | `#ACB6BF` |
+| Text muted | `text-muted` | `#565B66` |
+| Border | `border-subtle` | `#6C7380` |
+| Primary | `accent-primary` | `#59C2FF` |
+| Active | `accent-active` | `#E6B450` |
+| Success | `status-success` | `#7FD962` |
+| Warning | `status-warning` | `#E6B673` |
+| Error | `status-error` | `#D95757` |
+| Info | `status-info` | `#39BAE6` |
 
 ### Rules
 
@@ -61,34 +83,55 @@ Textual spacing uses terminal cells rather than pixels. The base unit is one cel
 | `space-2` | 2 cells | Panel padding and section separation |
 | `space-3` | 3 cells | Generous empty-state breathing room |
 
-The app is a fixed full-screen shell. The main region owns roughly 75-80% of width;
-the right rail owns 20-25%, with a 24-cell minimum and 32-cell preferred width.
+The app is a fixed full-screen vertical shell: a one-row full-width header, a flexible
+body, and a one-row full-width footer. The body contains the conversation column and
+Forge's retained right-hand status rail. The main region owns roughly 75-80% of body
+width; the rail owns 20-25%, with a 24-cell minimum and 32-cell preferred width.
 The conversation viewport is the only vertical scroll owner. The rail and composer
-remain fixed. At widths below 72 cells, the rail hides so the primary interaction
-remains usable; status stays available through `/status`.
+remain fixed between the header and footer. At widths below 72 cells, the rail hides
+so the primary interaction remains usable; status stays available through `/status`.
 
 ## 5. Components
+
+### Header bar
+
+- **Structure**: `#header`, a one-row chrome bar spanning the full shell width.
+- **Left**: bold accent `◆ FORGE` wordmark, session name, and workspace directory basename.
+- **Right**: `<mode> · <model>` and `ctx <pct>%`.
+- **Layout**: fixed first row above the conversation and retained status rail.
 
 ### Conversation stream
 
 - **Structure**: vertical scroll containing message blocks and activity records.
-- **Variants**: user, Forge, tool, notice, error.
+- **Variants**: `.message-user` uses an elevated background, secondary left rail, and `›`
+  prefix; `.message-forge` uses an accent left rail; `.message-tool` uses the info color
+  and `·` prefix; `.message-notice` uses the secondary color and `·` prefix;
+  `.message-error` uses an error left rail, error color, and `✗` prefix.
 - **Spacing**: `space-1` within a message and `space-2` between messages.
 - **States**: empty welcome, active generation, populated, error.
-- **Accessibility**: chronological DOM order; plain ASCII labels; selectable text.
+- **Accessibility**: chronological DOM order; prefixes reinforce color and rail treatments;
+  selectable text.
 - **Motion**: none; new content scrolls into view only when appended.
 - **Layout**: stack; owns vertical scrolling.
 
 ### Composer
 
-- **Structure**: one labeled input at the bottom of the main column.
+- **Structure**: `#composer`, a four-row boxed input with a `round` border at the bottom
+  of the main column.
 - **Variants**: ready, busy, disabled.
 - **Spacing**: `space-1` vertical and `space-2` horizontal padding.
-- **States**: default, focus, history navigation, submitted, disabled, error.
+- **States**: default, accent border on focus, history navigation, submitted, disabled, error.
 - **Accessibility**: keyboard-first; Enter submits; Up and Down navigate submitted input;
   visible focus treatment.
 - **Motion**: none.
 - **Layout**: fixed final row of the main-column shell.
+
+### Footer bar
+
+- **Structure**: `#footer`, a one-row hint bar spanning the full shell width.
+- **Left**: `enter send · shift+enter newline · ↑↓ history · /help commands · ctrl+q quit`.
+- **Right**: token usage and estimated cost.
+- **Layout**: fixed final row below the conversation and retained status rail.
 
 ### Activity progress
 
@@ -110,7 +153,8 @@ remains usable; status stays available through `/status`.
 - **States**: zero usage, normal usage, context warning, long-value truncation.
 - **Accessibility**: labels precede values; status is not conveyed by color alone.
 - **Motion**: none.
-- **Layout**: fixed right column; never participates in conversation scrolling.
+- **Layout**: fixed right column between the full-width header and footer; never
+  participates in conversation scrolling.
 
 ### Approval dialog
 
