@@ -41,6 +41,24 @@ def test_deepseek_requires_key():
     assert MODELS["deepseek"].requires_key == "DEEPSEEK_API_KEY"
 
 
+def test_deepseek_profiles_target_current_models():
+    # Given: the DeepSeek aliases
+    # When: their model identifiers are inspected
+    # Then: they target the current V4.1 Flash and V4 Pro APIs
+    assert MODELS["deepseek"].model_id == "deepseek/deepseek-flash"
+    assert MODELS["deepseek-pro"].model_id == "deepseek/deepseek-v4-pro"
+
+
+def test_registry_includes_current_frontier_aliases():
+    # Given: the model registry
+    # When: current frontier aliases are resolved
+    # Then: each alias points at its provider model
+    assert MODELS["openai-mini"].model_id == "openai/gpt-5-mini"
+    assert MODELS["openai-nano"].model_id == "openai/gpt-5-nano"
+    assert MODELS["gemini-pro"].model_id == "gemini/gemini-2.5-pro"
+    assert MODELS["xai"].model_id == "xai/grok-4"
+
+
 def test_default_model_is_ollama():
     assert DEFAULT_MODEL == "ollama"
 

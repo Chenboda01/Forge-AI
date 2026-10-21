@@ -35,26 +35,55 @@ MODELS: dict[str, ModelConfig] = {
             structured_output=True,
         ),
     ),
+    "openai-mini": ModelConfig(
+        name="OpenAI GPT-5 Mini",
+        model_id="openai/gpt-5-mini",
+        provider="OpenAI",
+        requires_key="OPENAI_API_KEY",
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            reasoning=True,
+            structured_output=True,
+        ),
+    ),
+    "openai-nano": ModelConfig(
+        name="OpenAI GPT-5 Nano",
+        model_id="openai/gpt-5-nano",
+        provider="OpenAI",
+        requires_key="OPENAI_API_KEY",
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            reasoning=True,
+            structured_output=True,
+        ),
+    ),
     # DeepSeek
     "deepseek": ModelConfig(
-        name="DeepSeek",
-        model_id="deepseek/deepseek-chat",
+        name="DeepSeek V4.1 Flash",
+        model_id="deepseek/deepseek-flash",
         provider="DeepSeek",
         requires_key="DEEPSEEK_API_KEY",
         capabilities=ModelCapabilities(
             tool_calling=True,
             streaming=True,
+            reasoning=True,
             structured_output=True,
         ),
     ),
-    "deepseek-reasoner": ModelConfig(
-        name="DeepSeek Reasoner",
-        model_id="deepseek/deepseek-reasoner",
+    "deepseek-pro": ModelConfig(
+        name="DeepSeek V4 Pro",
+        model_id="deepseek/deepseek-v4-pro",
         provider="DeepSeek",
         requires_key="DEEPSEEK_API_KEY",
         capabilities=ModelCapabilities(
+            tool_calling=True,
             streaming=True,
             reasoning=True,
+            structured_output=True,
         ),
     ),
     # Anthropic
@@ -75,6 +104,19 @@ MODELS: dict[str, ModelConfig] = {
     "gemini": ModelConfig(
         name="Gemini",
         model_id="gemini/gemini-2.5-flash",
+        provider="Google",
+        requires_key="GEMINI_API_KEY",
+        capabilities=ModelCapabilities(
+            tool_calling=True,
+            streaming=True,
+            vision=True,
+            reasoning=True,
+            structured_output=True,
+        ),
+    ),
+    "gemini-pro": ModelConfig(
+        name="Gemini 2.5 Pro",
+        model_id="gemini/gemini-2.5-pro",
         provider="Google",
         requires_key="GEMINI_API_KEY",
         capabilities=ModelCapabilities(
@@ -124,8 +166,8 @@ MODELS: dict[str, ModelConfig] = {
     ),
     # xAI
     "xai": ModelConfig(
-        name="Grok",
-        model_id="xai/grok-2-latest",
+        name="Grok 4",
+        model_id="xai/grok-4",
         provider="xAI",
         requires_key="XAI_API_KEY",
         capabilities=ModelCapabilities(

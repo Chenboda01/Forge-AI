@@ -11,11 +11,15 @@ if TYPE_CHECKING:
     from .agent import ForgeAgent
 
 MODEL_CONTEXT_LIMITS: Final[dict[str, int]] = {
-    "deepseek/deepseek-chat": 1_048_576,
-    "deepseek/deepseek-reasoner": 128_000,
+    "deepseek/deepseek-flash": 1_048_576,
+    "deepseek/deepseek-v4-pro": 1_048_576,
     "openai/gpt-5": 128_000,
+    "openai/gpt-5-mini": 400_000,
+    "openai/gpt-5-nano": 400_000,
     "anthropic/claude-sonnet-4-5": 200_000,
     "gemini/gemini-2.5-flash": 1_000_000,
+    "gemini/gemini-2.5-pro": 1_048_576,
+    "xai/grok-4": 256_000,
     "groq/llama-3.3-70b-versatile": 128_000,
     "mistral/mistral-large-latest": 128_000,
     "ollama/llama3.2:1b": 128_000,
