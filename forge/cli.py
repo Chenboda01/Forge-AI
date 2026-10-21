@@ -22,6 +22,7 @@ from .forge_core.credentials import (
     system_credential_store,
 )
 from .forge_core.discovery import discover_project
+from .forge_core.herdr import HerdrReporter
 from .forge_core.instructions import load_project_instructions
 from .forge_core.models import MODELS
 from .forge_core.provider import ForgeProvider, ForgeProviderError
@@ -297,16 +298,28 @@ def chat(
         )
         raise typer.Exit(code=1)
     configuration = _load_configuration_or_exit(ConfigurationOverrides(model=model))
+    reporter = HerdrReporter.from_environment()
     try:
-        runtime = build_runtime(configuration=configuration, mode=mode)
+        runtime = build_runtime(
+            configuration=configuration,
+            mode=mode,
+            lifecycle=reporter,
+        )
     except ForgeProviderError as error:
+        if reporter is not None:
+            reporter.release()
         typer.echo(f"Forge could not start: {error}", err=True)
         raise typer.Exit(code=1) from None
+    if reporter is not None:
+        reporter.report_idle()
     try:
         ForgeApp(runtime).run()
     except KeyboardInterrupt:
         typer.echo("\nForge interrupted.")
         raise typer.Exit(code=130) from None
+    finally:
+        if reporter is not None:
+            reporter.release()
 
 
 def main() -> None:

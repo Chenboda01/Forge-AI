@@ -82,9 +82,12 @@ def test_chat_routes_explicit_build_mode_to_runtime(monkeypatch) -> None:
     captured: dict[str, object] = {}
     runtime = object()
 
-    def record_runtime(*, configuration: ForgeConfig, mode: AgentMode) -> object:
+    def record_runtime(
+        *, configuration: ForgeConfig, mode: AgentMode, lifecycle: object = None
+    ) -> object:
         captured["configuration"] = configuration
         captured["mode"] = mode
+        captured["lifecycle"] = lifecycle
         return runtime
 
     class RecordingApp:
@@ -105,6 +108,55 @@ def test_chat_routes_explicit_build_mode_to_runtime(monkeypatch) -> None:
     assert result.exit_code == 0
     assert captured["mode"] is AgentMode.BUILD
     assert captured["runtime"] is runtime
+
+
+def test_chat_passes_and_releases_the_herdr_reporter(monkeypatch) -> None:
+    # Given: a Herdr pane reporter and a runtime that records its lifecycle adapter
+    captured: dict[str, object] = {}
+
+    class FakeReporter:
+        released = False
+        reported_idle = False
+
+        def report_idle(self) -> None:
+            self.reported_idle = True
+
+        def release(self) -> None:
+            self.released = True
+
+    reporter = FakeReporter()
+
+    class FakeHerdrReporter:
+        @classmethod
+        def from_environment(cls) -> FakeReporter:
+            return reporter
+
+    def record_runtime(
+        *, configuration: ForgeConfig, mode: AgentMode, lifecycle: object = None
+    ) -> object:
+        captured["lifecycle"] = lifecycle
+        return object()
+
+    class RecordingApp:
+        def __init__(self, received_runtime: object) -> None:
+            return None
+
+        def run(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli_module, "is_interactive_terminal", lambda: True)
+    monkeypatch.setattr(cli_module, "HerdrReporter", FakeHerdrReporter)
+    monkeypatch.setattr(cli_module, "build_runtime", record_runtime)
+    monkeypatch.setattr(cli_module, "ForgeApp", RecordingApp)
+
+    # When: the agent runs in a Herdr pane
+    result = runner.invoke(cli_module.app, ["chat"])
+
+    # Then: the reporter observes the runtime and is released when Forge exits
+    assert result.exit_code == 0
+    assert captured["lifecycle"] is reporter
+    assert reporter.reported_idle is True
+    assert reporter.released is True
 
 
 def test_chat_reports_expected_provider_configuration_errors(monkeypatch) -> None:
