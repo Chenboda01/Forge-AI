@@ -5,6 +5,7 @@ from .forge_core.agent import AgentMode, ForgeAgent
 from .forge_core.config import ConfigurationError, ForgeConfig, load_configuration
 from .forge_core.delegation import register_delegation_tool
 from .forge_core.instructions import load_project_instructions
+from .forge_core.presenter import AgentLifecycle
 from .forge_core.provider import ForgeProvider
 from .forge_core.safe_io import SafeWriteError
 from .forge_core.sessions import SessionManager
@@ -31,6 +32,7 @@ def build_runtime(
     *,
     mode: AgentMode = AgentMode.ASK,
     working_directory: Path | None = None,
+    lifecycle: AgentLifecycle | None = None,
 ) -> ForgeRuntime:
     """Build the primary agent and isolated subagent runtime for Textual."""
     try:
@@ -49,13 +51,19 @@ def build_runtime(
     )
     try:
         tools = create_tool_registry(workspace)
-        subagents = SubagentRunner(tools, provider, project_instructions)
+        subagents = SubagentRunner(
+            tools,
+            provider,
+            project_instructions,
+            lifecycle=lifecycle,
+        )
         register_delegation_tool(tools, subagents)
         agent = ForgeAgent(
             provider=provider,
             tools=tools,
             mode=mode,
             project_instructions=project_instructions,
+            lifecycle=lifecycle,
         )
         return ForgeRuntime(
             provider=provider,

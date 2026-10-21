@@ -23,7 +23,7 @@ from .context import (
     fit_messages,
 )
 from .instructions import ProjectInstructions, TaskMetadata
-from .presenter import AgentPresenter, SilentPresenter
+from .presenter import AgentLifecycle, AgentPresenter, NullLifecycle, SilentPresenter
 from .provider import (
     CompletionRequest,
     CompletionResponse,
@@ -59,6 +59,7 @@ class ForgeAgent:
         *,
         mode: AgentMode = AgentMode.ASK,
         project_instructions: ProjectInstructions | None = None,
+        lifecycle: AgentLifecycle | None = None,
     ):
         self.provider = provider
         self.tools = tools
@@ -70,6 +71,7 @@ class ForgeAgent:
         self.max_tool_calls = DEFAULT_MAX_TOOL_CALLS
         self.max_repeated_tool_calls = DEFAULT_MAX_REPEATED_TOOL_CALLS
         self.presenter = presenter or SilentPresenter()
+        self.lifecycle = lifecycle or NullLifecycle()
         self._cancel_requested, self._cancel_lock = Event(), Lock()
         self._accepting_cancellation = False
 
@@ -139,10 +141,12 @@ class ForgeAgent:
         except AgentLimitError as error:
             raise AgentError(str(error)) from error
         self._begin_operation()
+        self.lifecycle.turn_started()
         try:
             return self._run(user_message, limits)
         finally:
             self._finish_operation()
+            self.lifecycle.turn_finished()
 
     def _run(self, user_message: str, limits: AgentLimits) -> str:
         self._raise_if_interrupted()
@@ -265,10 +269,14 @@ class ForgeAgent:
             None if self._active_tools.workspace is None else self._active_tools.workspace.root
         )
         approval_details = render_approval_details(tool, arguments_json, working_directory)
-        if tool.requires_approval and not self.presenter.request_approval(
-            tool_name, approval_details
-        ):
-            return "The user denied this tool request."
+        if tool.requires_approval:
+            self.lifecycle.waiting_for_approval(tool_name)
+            try:
+                approved = self.presenter.request_approval(tool_name, approval_details)
+            finally:
+                self.lifecycle.approval_resolved()
+            if not approved:
+                return "The user denied this tool request."
 
         try:
             result = self._active_tools.execute(tool_name, arguments)

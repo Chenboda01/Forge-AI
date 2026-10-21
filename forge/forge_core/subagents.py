@@ -6,6 +6,7 @@ from threading import Event, Lock
 from typing import Any
 
 from .instructions import ProjectInstructions, TaskMetadata
+from .presenter import AgentLifecycle, NullLifecycle
 from .provider import CompletionRequest, ForgeProviderError, ProviderClient
 from .redaction import redact_text
 from .tools import ToolError, ToolRegistry
@@ -96,10 +97,13 @@ class SubagentRunner:
         tool_registry: ToolRegistry,
         provider: ProviderClient,
         project_instructions: ProjectInstructions | None = None,
+        *,
+        lifecycle: AgentLifecycle | None = None,
     ) -> None:
         self.tool_registry = tool_registry
         self.provider = provider
         self.project_instructions = project_instructions or ProjectInstructions()
+        self.lifecycle = lifecycle or NullLifecycle()
         self.task_metadata: TaskMetadata = self.project_instructions.task_metadata
         self._cancel_requested = Event()
         self._cancel_lock = Lock()
@@ -143,10 +147,12 @@ class SubagentRunner:
         constraints: list[str] | None = None,
     ) -> str:
         self._begin_operation()
+        self.lifecycle.turn_started()
         try:
             return self._run(agent_name, objective, context_files, constraints)
         finally:
             self._finish_operation()
+            self.lifecycle.turn_finished()
 
     def _run(
         self,

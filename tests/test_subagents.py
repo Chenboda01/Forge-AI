@@ -6,6 +6,23 @@ from forge.forge_core.subagents import SUBAGENTS, SubagentError
 from forge.ui.commands import CommandService
 
 
+class RecordingLifecycle:
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+    def turn_started(self) -> None:
+        self.events.append("turn_started")
+
+    def waiting_for_approval(self, tool_name: str) -> None:
+        self.events.append(f"waiting:{tool_name}")
+
+    def approval_resolved(self) -> None:
+        self.events.append("approval_resolved")
+
+    def turn_finished(self) -> None:
+        self.events.append("turn_finished")
+
+
 def test_runtime_exposes_delegate_task(monkeypatch, tmp_path) -> None:
     # Given: a local provider and isolated workspace
     monkeypatch.setenv("FORGE_MODEL", "ollama")
@@ -50,6 +67,24 @@ def test_subagents_follow_primary_model_switches(monkeypatch, tmp_path) -> None:
 
     # Then: future subagent requests use that same explicitly selected model
     assert runtime.subagents.model_id == runtime.agent.model_id
+
+
+def test_subagent_reports_its_turn_lifecycle(monkeypatch, tmp_path) -> None:
+    # Given: a runtime composed with a lifecycle observer
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    lifecycle = RecordingLifecycle()
+    runner = build_runtime(tmp_path, lifecycle=lifecycle).subagents
+    monkeypatch.setattr(
+        runner.provider,
+        "complete",
+        lambda _request: CompletionResponse("report", (), TokenUsage(0, 0), "stop"),
+    )
+
+    # When: a subagent completes a delegated objective
+    assert runner.run("explore", "inspect") == "report"
+
+    # Then: the observer sees a working turn that returns to idle
+    assert lifecycle.events == ["turn_started", "turn_finished"]
 
 
 def test_subagent_discards_report_after_interrupt(monkeypatch, tmp_path) -> None:

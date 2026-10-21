@@ -1,6 +1,34 @@
 from typing import Protocol
 
 
+class AgentLifecycle(Protocol):
+    """Observability boundary for the deterministic agent turn lifecycle."""
+
+    def turn_started(self) -> None: ...
+
+    def waiting_for_approval(self, tool_name: str) -> None: ...
+
+    def approval_resolved(self) -> None: ...
+
+    def turn_finished(self) -> None: ...
+
+
+class NullLifecycle:
+    """Lifecycle adapter used when no external observer is present."""
+
+    def turn_started(self) -> None:
+        return None
+
+    def waiting_for_approval(self, tool_name: str) -> None:
+        return None
+
+    def approval_resolved(self) -> None:
+        return None
+
+    def turn_finished(self) -> None:
+        return None
+
+
 class AgentPresenter(Protocol):
     """Trusted output and approval boundary used by the agent loop."""
 
