@@ -76,6 +76,39 @@ def test_auth_login_rejects_an_unknown_provider(monkeypatch) -> None:
     assert "openai" in result.output
 
 
+def test_auth_login_asks_before_accepting_a_typo_correction(monkeypatch) -> None:
+    # Given: an interactive terminal and a misspelled provider
+    backend = MemoryBackend()
+    _install_store(monkeypatch, backend)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(cli_module, "is_interactive_terminal", lambda: True)
+
+    # When: the user confirms the suggested provider and enters the key
+    result = runner.invoke(
+        cli_module.app,
+        ["auth", "login", "antropic"],
+        input=f"y\n{SECRET}\n",
+    )
+
+    # Then: the correction is used and the secret is not echoed
+    assert result.exit_code == 0
+    assert "Did you mean 'anthropic'?" in result.output
+    assert backend.values[(CREDENTIAL_SERVICE, "ANTHROPIC_API_KEY")] == SECRET
+    assert SECRET not in result.output
+
+
+def test_auth_login_suggests_a_correction_without_a_terminal(monkeypatch) -> None:
+    _install_store(monkeypatch, MemoryBackend())
+
+    # When: a misspelled provider is given non-interactively
+    result = runner.invoke(cli_module.app, ["auth", "login", "antropic"])
+
+    # Then: Forge suggests the closest provider and still fails closed
+    assert result.exit_code == 1
+    assert "Did you mean 'anthropic'?" in result.output
+    assert "Available providers:" in result.output
+
+
 def test_auth_login_skips_local_providers(monkeypatch) -> None:
     _install_store(monkeypatch, MemoryBackend())
 

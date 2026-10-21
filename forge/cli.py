@@ -1,5 +1,6 @@
 import shutil
 import sys
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Annotated, Final
 
@@ -153,16 +154,28 @@ def models() -> None:
     typer.echo("\n".join(lines))
 
 
+def _suggest_provider(identifier: str) -> str | None:
+    normalized = identifier.strip().lower().replace("_", "-")
+    matches = get_close_matches(normalized, list(PROVIDERS), n=1, cutoff=0.7)
+    return matches[0] if matches else None
+
+
 def _resolve_provider(identifier: str) -> ProviderConfig:
     provider = provider_by_id(identifier)
-    if provider is None:
-        available = ", ".join(PROVIDERS)
-        typer.echo(
-            f"Unknown provider '{identifier}'. Available providers: {available}",
-            err=True,
-        )
-        raise typer.Exit(code=1)
-    return provider
+    if provider is not None:
+        return provider
+    suggestion = _suggest_provider(identifier)
+    if suggestion is not None:
+        question = f"Unknown provider '{identifier}'. Did you mean '{suggestion}'?"
+        if is_interactive_terminal():
+            if typer.confirm(question, default=True):
+                return PROVIDERS[suggestion]
+        else:
+            typer.echo(question, err=True)
+    else:
+        typer.echo(f"Unknown provider '{identifier}'.", err=True)
+    typer.echo(f"Available providers: {', '.join(PROVIDERS)}", err=True)
+    raise typer.Exit(code=1)
 
 
 def _prompt_for_provider() -> ProviderConfig:
