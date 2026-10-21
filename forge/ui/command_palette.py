@@ -21,7 +21,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("/help", "Show the command list"),
     CommandSpec("/status", "Show provider, model, mode, and workspace"),
     CommandSpec("/usage", "Show token usage and estimated cost"),
-    CommandSpec("/models", "List model profiles"),
+    CommandSpec("/models", "Open the model picker"),
     CommandSpec("/model", "Choose or switch the active model"),
     CommandSpec("/files", "List workspace files"),
     CommandSpec("/read", "Read a workspace file"),

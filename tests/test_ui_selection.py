@@ -86,6 +86,25 @@ async def test_bare_model_command_opens_the_searchable_picker(monkeypatch, tmp_p
 
 
 @pytest.mark.asyncio
+async def test_plural_models_command_opens_the_same_picker(monkeypatch, tmp_path) -> None:
+    # Given: a connected local runtime
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    app = ForgeApp(runtime, skip_startup=True)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+
+        # When: the user enters the plural alias
+        composer.text = "/models"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: both aliases open the searchable picker
+        assert isinstance(app.screen, ModelSelectScreen)
+
+
+@pytest.mark.asyncio
 async def test_model_picker_requires_a_connected_runtime() -> None:
     # Given: Forge without a model runtime
     app = ForgeApp(skip_startup=True)

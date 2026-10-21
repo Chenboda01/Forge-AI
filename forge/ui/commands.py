@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from forge.forge_core.models import MODELS
 from forge.forge_core.provider import ForgeProviderError
 from forge.forge_core.subagents import SUBAGENTS
 from forge.ui.checkpoint_commands import checkpoint_text, undo_checkpoint
@@ -70,12 +69,6 @@ class CommandService:
             "/recovery  /recover ACTION ID\n"
             "/updates  /compact\n"
             "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit"
-        )
-
-    @staticmethod
-    def models_text() -> str:
-        return "Models\n" + "\n".join(
-            f"{alias:<20} {model.model_id}" for alias, model in MODELS.items()
         )
 
     @staticmethod
@@ -201,7 +194,6 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         "/help": app.commands.help_text,
         "/status": app.commands.status_text,
         "/usage": app.commands.usage_text,
-        "/models": app.commands.models_text,
         "/files": app.commands.list_files,
         "/sessions": app.commands.sessions_text,
         "/history": app.commands.history_text,
@@ -213,9 +205,9 @@ async def handle_command(app: ForgeApp, command: str) -> None:
     if handler is not None:
         await app._show_command_result(handler())
         return
-    if name == "/model":
+    if name in ("/model", "/models"):
         argument = argument.strip()
-        if argument:
+        if name == "/model" and argument:
             await app._show_command_result(app.commands.switch_model(argument))
         else:
             await _model_select(app)
