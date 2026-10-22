@@ -143,7 +143,7 @@
         <article class="latest-card">
           <p class="latest-kicker">Sessions</p>
           <h3>Sessions that survive</h3>
-          <p>Typed, redacted, atomic snapshots with <code>/sessions</code>, <code>/resume</code>, and <code>/history</code>. Restarts do not replay pending tool actions.</p>
+          <p>Explicit <code>/save</code>, redacted atomic snapshots, and <code>/sessions</code>, <code>/resume</code>, and <code>/history</code>. Restarts do not replay pending tool actions.</p>
         </article>
       </div>
     </section>
@@ -265,7 +265,7 @@
         </div>
         <div class="cap-card">
           <h3>Checkpoints and recovery</h3>
-          <p>Restrictive on-disk checkpoints, restart-safe <code>/undo</code>, interrupted-transaction detection, and state-contained discard through <code>/recovery</code>.</p>
+          <p>Automatic on-disk checkpoints, a full inventory through <code>/checkpoints</code>, restart-safe <code>/undo ID</code>, interrupted-transaction detection, and state-contained discard through <code>/recovery</code>.</p>
           <span class="cap-evidence">tests/test_checkpoints.py · tests/test_recovery.py</span>
         </div>
         <div class="cap-card">
@@ -275,7 +275,7 @@
         </div>
         <div class="cap-card">
           <h3>Sessions and history</h3>
-          <p>Typed snapshots are redacted and written atomically. <code>/sessions</code>, <code>/resume</code>, and <code>/history</code> restore conversation without replaying pending tools.</p>
+          <p>Typed snapshots are redacted and written atomically. <code>/save</code>, <code>/sessions</code>, <code>/resume</code>, and <code>/history</code> restore conversation without replaying pending tools.</p>
           <span class="cap-evidence">tests/test_sessions.py · tests/test_session_storage.py</span>
         </div>
         <div class="cap-card">
@@ -315,14 +315,16 @@
         <div class="command-row"><dt><code>/files</code></dt><dd>List workspace files</dd></div>
         <div class="command-row"><dt><code>/read FILE</code></dt><dd>Read a UTF-8 text file</dd></div>
         <div class="command-row"><dt><code>/tree</code></dt><dd>List workspace files recursively</dd></div>
-        <div class="command-row"><dt><code>/new</code></dt><dd>Start a new conversation</dd></div>
+        <div class="command-row"><dt><code>/new</code></dt><dd>Start a new conversation and save the current one</dd></div>
+        <div class="command-row"><dt><code>/save [NAME]</code></dt><dd>Save the current conversation explicitly</dd></div>
         <div class="command-row"><dt><code>/sessions</code></dt><dd>List saved sessions</dd></div>
         <div class="command-row"><dt><code>/resume</code></dt><dd>Resume a saved session</dd></div>
         <div class="command-row"><dt><code>/history</code></dt><dd>Show conversation history</dd></div>
         <div class="command-row"><dt><code>/agents</code></dt><dd>List available subagents</dd></div>
         <div class="command-row"><dt><code>/agent</code></dt><dd>Delegate an objective to a subagent</dd></div>
-        <div class="command-row"><dt><code>/checkpoint</code></dt><dd>List patch checkpoints</dd></div>
-        <div class="command-row"><dt><code>/undo</code></dt><dd>Undo a checkpoint</dd></div>
+        <div class="command-row"><dt><code>/checkpoints</code></dt><dd>List every patch checkpoint and its ID</dd></div>
+        <div class="command-row"><dt><code>/checkpoint</code></dt><dd>Alias for /checkpoints</dd></div>
+        <div class="command-row"><dt><code>/undo [ID]</code></dt><dd>Restore a checkpoint; latest when omitted</dd></div>
         <div class="command-row"><dt><code>/recovery</code></dt><dd>Show recovery state</dd></div>
         <div class="command-row"><dt><code>/recover</code></dt><dd>Run a recovery action</dd></div>
         <div class="command-row"><dt><code>/updates</code></dt><dd>Check for Forge updates</dd></div>
@@ -333,6 +335,35 @@
         <div class="command-row"><dt><code>/clear</code></dt><dd>Clear the conversation display</dd></div>
         <div class="command-row"><dt><code>/exit</code></dt><dd>Exit Forge</dd></div>
       </dl>
+    </section>
+
+    <!-- Sessions and checkpoints -->
+    <section id="state" aria-labelledby="state-title">
+      <p class="eyebrow">State</p>
+      <h2 id="state-title">Save a session, restore a checkpoint</h2>
+      <p>Sessions and checkpoints are different things. A session is your conversation. A checkpoint is the exact pre-patch content of the files Forge is about to edit.</p>
+      <div class="cap-grid">
+        <article class="cap-card">
+          <h3>Save and resume a session</h3>
+          <ol class="state-steps">
+            <li>Work normally until the conversation is worth keeping.</li>
+            <li>Run <code>/save release-prep</code>. The optional name appears in <code>/sessions</code>.</li>
+            <li>Forge redacts secrets and writes <code>.forge/sessions/&lt;id&gt;.json</code> atomically.</li>
+            <li>Run <code>/sessions</code> to list IDs, then <code>/resume ID</code> to restore the conversation and token counts.</li>
+          </ol>
+          <p class="caption"><code>/new</code> saves the current conversation automatically before clearing it. Nothing is saved on exit, so run <code>/save</code> first.</p>
+        </article>
+        <article class="cap-card">
+          <h3>Inspect and restore a checkpoint</h3>
+          <ol class="state-steps">
+            <li>Every applied patch creates a checkpoint before writing to disk.</li>
+            <li>Run <code>/checkpoints</code> to list every ID, time, task, patch, and file count.</li>
+            <li>Run <code>/undo ID</code> to restore those files. <code>/undo</code> alone restores the latest checkpoint.</li>
+            <li>Records live in <code>.forge/checkpoints/&lt;id&gt;.json</code> and are validated before restore.</li>
+          </ol>
+          <p class="caption">Checkpoints cover only the files a patch touched. New files are removed on undo; edited files get their original content back.</p>
+        </article>
+      </div>
     </section>
 
     <!-- Security -->

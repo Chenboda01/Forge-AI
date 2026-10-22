@@ -513,6 +513,21 @@ strong {
   letter-spacing: 0.05em;
 }
 
+.state-steps {
+  padding-left: var(--space-6);
+  margin-bottom: var(--space-3);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.state-steps li {
+  margin-bottom: var(--space-2);
+}
+
+.state-steps li:last-child {
+  margin-bottom: 0;
+}
+
 .latest-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
