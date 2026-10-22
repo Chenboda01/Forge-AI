@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Forge — Multi-provider terminal AI coding agent</title>
-  <meta name="description" content="Forge is a workflow-first terminal AI coding agent. Connect your providers, inspect repositories, delegate tasks, and ship stronger software.">
+  <title>Forge — Workflow-first terminal AI coding agent</title>
+  <meta name="description" content="Forge is a workflow-first terminal AI coding agent with 27 model profiles across 24 providers, approval-gated patches, checkpoints, guarded validation, read-only subagents, and a live cost meter.">
   <meta property="og:title" content="Forge — Shape code. Temper bugs. Ship stronger software.">
-  <meta property="og:description" content="Workflow-first terminal AI coding agent with provider independence, trust-by-evidence, and safe delegation.">
+  <meta property="og:description" content="Workflow-first terminal AI coding agent with provider independence, recovery-first patches, guarded validation, and read-only delegation.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://chenboda01.github.io/Forge-AI/">
   <meta name="twitter:card" content="summary">
@@ -24,19 +24,26 @@
     <nav aria-label="Site">
       <span class="logo" aria-hidden="true">&#x2692;</span>
       <span class="brand">Forge</span>
+      <div class="nav-links">
+        <a href="#latest">Latest</a>
+        <a href="#install">Install</a>
+        <a href="#capabilities">Capabilities</a>
+        <a href="#security">Security</a>
+        <a href="#roadmap">Roadmap</a>
+      </div>
     </nav>
   </header>
 
   <main id="main-content">
 
     <!-- Hero -->
-    <section class="hero">
-      <div class="hero-badge">v5.0.0 · Development</div>
-      <h1 class="hero-title">Shape code.<br>Temper bugs.<br>Ship stronger software.</h1>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-badge">v5.0.0 · Pre-release</div>
+      <h1 class="hero-title" id="hero-title">Shape code.<br>Temper bugs.<br>Ship stronger software.</h1>
       <p class="hero-sub">
-        Forge is a workflow-first terminal AI coding agent.
-        Connect your providers, inspect repositories, delegate tasks to read-only subagents, and let Forge propose evidence-backed patches.
-        Every destructive action requires human approval.
+        Forge is a workflow-first terminal AI coding agent with 27 model profiles across 24 providers.
+        It proposes approval-gated patches, checkpoints every edit, validates with restricted commands,
+        delegates to read-only subagents, and tracks cost and model identity explicitly.
       </p>
       <div class="hero-actions">
         <a href="#install" class="btn-primary">Install Forge</a>
@@ -45,212 +52,326 @@
     </section>
 
     <!-- Product Preview -->
-    <section class="preview">
+    <section class="preview" aria-labelledby="preview-title">
+      <h2 class="visually-hidden" id="preview-title">Forge terminal preview</h2>
       <div class="terminal-window" aria-label="Forge terminal interface preview" role="img">
         <div class="terminal-bar">
           <span class="terminal-dot" aria-hidden="true"></span>
           <span class="terminal-dot" aria-hidden="true"></span>
           <span class="terminal-dot" aria-hidden="true"></span>
-          <span class="terminal-title">Forge — DeepSeek Chat</span>
+          <span class="terminal-title">Forge — DeepSeek V4.1 Flash</span>
         </div>
         <pre class="terminal-content">
-<span class="t-dim">~/Projects/app   main   BUILD   DeepSeek Chat</span>
+<span class="t-dim">~/Projects/app   main   BUILD   DeepSeek V4.1 Flash</span>
 
-<span class="t-forge">Forge</span>
+<span class="t-forge">⚒ FORGE</span>
 <span class="t-dim">Shape code. Temper bugs. Ship stronger software.</span>
-<span class="t-dim">Enter /help for commands.</span>
+<span class="t-dim">◇ INITIALIZING CORE</span>
+<span class="t-dim">◇ SCANNING WORKSPACE · FORGE ONLINE</span>
 
 <span class="t-you">you</span> Add provider health checks and tests.
 
 <span class="t-forge">Forge</span> <span class="t-dim">I'll inspect provider configuration first.</span>
 
-<span class="t-agent">◇ Explore · running</span>
-<span class="t-dim">  Searching provider initialization…</span>
-<span class="t-dim">  Read 4 files · 1,284 tokens</span>
+<span class="t-agent">◇ explore · running</span>
+<span class="t-dim">  ✓ search_files "test_connection"</span>
+<span class="t-dim">  ✓ read forge/forge_core/provider.py</span>
+<span class="t-dim">  ✓ read forge/forge_core/config.py</span>
 
-<span class="t-agent">✓ Read forge_core/provider.py</span>
-<span class="t-agent">✓ Read forge_core/config.py</span>
-<span class="t-agent">◇ Delegated provider analysis</span>
+<span class="t-agent">✓ Patch preview ready · 2 files</span>
+<span class="t-agent">◇ Awaiting approval</span>
 
-<span class="t-status">2 agents · 7 tool calls · 8.4k tokens</span>
+<span class="t-status">2 agents · 7 tool calls · 8.4k tokens · $0.03</span>
 
 <span class="t-prompt">> </span><span class="t-cursor">&#x2588;</span></pre>
       </div>
     </section>
 
+    <!-- Latest -->
+    <section id="latest" aria-labelledby="latest-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Newest</p>
+          <h2 id="latest-title">Latest in Forge</h2>
+        </div>
+        <p class="section-note">Runtime, safety, and interface work — each backed by executable tests.</p>
+      </div>
+
+      <div class="latest-grid">
+        <article class="latest-card">
+          <p class="latest-kicker">Models</p>
+          <h3>27 profiles · 24 providers</h3>
+          <p><code>/models</code> and <code>/model</code> open a capability-aware picker. The CLI suggests close provider names, and Forge never silently falls back to another provider.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Cost</p>
+          <h3>Live cost meter</h3>
+          <p>Estimated USD from provider-reported tokens and LiteLLM pricing. Local models show <code>$0.0000</code>; unmapped cloud models show unavailable instead of guessing.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Identity</p>
+          <h3>Model self-awareness</h3>
+          <p>The active model name, ID, and provider are injected into the system prompt and refreshed every turn, so switching mid-session cannot leave stale identity.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Startup</p>
+          <h3>A forge, not a chat box</h3>
+          <p>Emblem, wordmark, and tagline hold the first beat, then loading phases hand off to the interface. Ten themes are available through <code>/theme</code>.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Herdr</p>
+          <h3>Herdr pane aware</h3>
+          <p>Inside a Herdr pane, Forge reports working, blocked, and idle lifecycle states, then releases them on exit. Outside Herdr it is a no-op.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Recovery</p>
+          <h3>Recovery-first edits</h3>
+          <p>Exact one-shot patch previews, atomic application, checkpoints, restart-safe <code>/undo</code>, and crash recovery through <code>/recovery</code> and <code>/recover</code>.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Validation</p>
+          <h3>Guarded validation</h3>
+          <p>Python, Node, and Rust command detection. Argument arrays only, secret-free environment, Linux network namespace, timeouts, process-group termination, bounded and redacted output.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Sessions</p>
+          <h3>Sessions that survive</h3>
+          <p>Typed, redacted, atomic snapshots with <code>/sessions</code>, <code>/resume</code>, and <code>/history</code>. Restarts do not replay pending tool actions.</p>
+        </article>
+      </div>
+    </section>
+
     <!-- Installation -->
-    <section id="install">
-      <h2>Install Forge</h2>
+    <section id="install" aria-labelledby="install-title">
+      <p class="eyebrow">Start</p>
+      <h2 id="install-title">Install Forge</h2>
 
       <h3>Prerequisites</h3>
       <ul>
         <li>Python 3.12 or newer</li>
-        <li>Git</li>
-        <li>An API key from one of the supported providers (DeepSeek, OpenAI, Anthropic, Google, Groq, Mistral, OpenRouter, or Ollama for local models)</li>
+        <li><code>uv</code> for dependency management</li>
+        <li>Git, plus <code>ripgrep</code> for fast workspace search</li>
+        <li>A provider API key, or a local runtime such as Ollama, LM Studio, or vLLM</li>
       </ul>
 
-      <h3>Clone and set up</h3>
+      <h3>Clone, sync, and run</h3>
       <div class="code-block">
         <code>
 <span class="c-prompt">$</span> git clone https://github.com/Chenboda01/Forge-AI.git
 <span class="c-prompt">$</span> cd Forge-AI
-<span class="c-prompt">$</span> python -m venv .venv
-<span class="c-prompt">$</span> .venv/bin/pip install -e .
+<span class="c-prompt">$</span> uv sync --extra dev
+<span class="c-prompt">$</span> uv run forge doctor
+<span class="c-prompt">$</span> uv run forge chat
         </code>
       </div>
 
-      <h3>Configure providers</h3>
-      <p>Create a <code>.env</code> file with your API keys:</p>
+      <h3>Credentials</h3>
+      <p>Forge reads credentials from the live process environment first, then the operating-system keyring.</p>
       <div class="code-block">
         <code>
-<span class="c-dim"># .env</span>
-DEEPSEEK_API_KEY=sk-your-deepseek-key
-OPENAI_API_KEY=sk-your-openai-key
-ANTHROPIC_API_KEY=sk-your-anthropic-key
-GEMINI_API_KEY=your-gemini-key
-OPENROUTER_API_KEY=sk-your-openrouter-key
-GROQ_API_KEY=gsk-your-groq-key
-MISTRAL_API_KEY=your-mistral-key
+<span class="c-prompt">$</span> export DEEPSEEK_API_KEY="sk-..."
+<span class="c-prompt">$</span> uv run forge auth login deepseek
+<span class="c-prompt">$</span> uv run forge auth list
+<span class="c-prompt">$</span> uv run forge provider test deepseek
+        </code>
+      </div>
+      <p class="note">Forge does not read project <code>.env</code> files. If secure storage is unavailable, it fails closed instead of writing a plaintext fallback.</p>
+
+      <h3>Choose a mode</h3>
+      <div class="code-block">
+        <code>
+<span class="c-prompt">$</span> uv run forge chat                  <span class="c-dim"># ASK (default): read-only</span>
+<span class="c-prompt">$</span> uv run forge chat --mode architect
+<span class="c-prompt">$</span> uv run forge chat --mode build     <span class="c-dim"># mutations still require approval</span>
         </code>
       </div>
 
-      <h3>Launch Forge</h3>
+      <h3>Inspect the catalog</h3>
       <div class="code-block">
         <code>
-<span class="c-prompt">$</span> forge
-        </code>
-      </div>
-      <p>Or select a specific model:</p>
-      <div class="code-block">
-        <code>
-<span class="c-prompt">$</span> forge            <span class="c-dim"># Uses FORGE_MODEL or Ollama default</span>
+<span class="c-prompt">$</span> uv run forge models
+<span class="c-prompt">$</span> uv run forge providers
         </code>
       </div>
     </section>
 
     <!-- Workflow -->
-    <section>
-      <h2>How Forge works</h2>
-      <p>Forge is <strong>workflow-first</strong>. The model recommends actions — the workflow engine controls permissions, approvals, limits, and recovery.</p>
+    <section aria-labelledby="workflow-title">
+      <p class="eyebrow">Runtime</p>
+      <h2 id="workflow-title">How Forge works</h2>
+      <p>Forge is <strong>workflow-first</strong>. The model recommends actions; the runtime controls permissions, approvals, limits, patches, validation, and recovery.</p>
 
       <div class="flow-steps">
         <div class="flow-step">
           <div class="flow-num">1</div>
           <h3>Understand</h3>
-          <p>Forge inspects your project, reads relevant files, and builds context before proposing any change.</p>
+          <p>Parse the task, constraints, and workspace before touching anything.</p>
         </div>
         <div class="flow-step">
           <div class="flow-num">2</div>
-          <h3>Plan</h3>
-          <p>A structured plan is created. Subagents can be delegated for read-only exploration and review.</p>
+          <h3>Inspect</h3>
+          <p>Search and read only the relevant files, then check Git state and project instructions.</p>
         </div>
         <div class="flow-step">
           <div class="flow-num">3</div>
-          <h3>Propose</h3>
-          <p>Forge proposes patches. Every destructive action — writes, commands, deletions — requires your approval.</p>
+          <h3>Plan</h3>
+          <p>Choose the smallest complete change and the validation evidence it needs.</p>
         </div>
         <div class="flow-step">
           <div class="flow-num">4</div>
+          <h3>Approve</h3>
+          <p>Writes, patches, commands, and deletions wait for a trusted, explicit approval.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">5</div>
+          <h3>Apply</h3>
+          <p>Match the exact preview, checkpoint first, serialize writers, and roll back on failure.</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-num">6</div>
           <h3>Validate</h3>
-          <p>Tests, lint, type checks, and Git diffs provide evidence. Forge never claims success without proof.</p>
+          <p>Run restricted commands, review the diff, and report evidence — never an unsupported claim.</p>
         </div>
       </div>
     </section>
 
     <!-- Capabilities -->
-    <section>
-      <h2>What Forge can do</h2>
+    <section id="capabilities" aria-labelledby="capabilities-title">
+      <p class="eyebrow">Capabilities</p>
+      <h2 id="capabilities-title">What Forge can do</h2>
 
       <div class="cap-grid">
         <div class="cap-card">
-          <h3>Multi-provider</h3>
-          <p>DeepSeek, OpenAI, Anthropic, Google, Groq, Mistral, OpenRouter, and Ollama. Switch models mid-session with <code>/model</code>.</p>
-          <span class="cap-evidence">104 tests</span>
+          <h3>Workflow-first modes</h3>
+          <p><code>ASK</code> and <code>ARCHITECT</code> are read-only. <code>BUILD</code> exposes mutations, but approval still comes from the trusted interface — never model text.</p>
+          <span class="cap-evidence">tests/test_agent.py</span>
         </div>
         <div class="cap-card">
-          <h3>Workspace safety</h3>
-          <p>All file access is confined to the project root. Paths that attempt to escape the workspace are blocked.</p>
-          <span class="cap-evidence">test_workspace.py</span>
+          <h3>Provider independence</h3>
+          <p>Anthropic, OpenAI, Google, xAI, DeepSeek, MiniMax, Moonshot, Qwen, OpenRouter, Together, Groq, Anyscale, Fireworks, Bedrock, Azure, Cloudflare, GitHub Models, Cohere, Mistral, Ollama, LM Studio, vLLM, OpenCode Go, and custom endpoints.</p>
+          <span class="cap-evidence">tests/test_models.py · tests/test_providers.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Recovery-first patch pipeline</h3>
+          <p>Typed unified diffs, exact one-shot preview matching, serialized writers, atomic replacement, rollback on failure, CREATE operations that refuse existing files, and deletion that refuses paths with uncommitted Git state.</p>
+          <span class="cap-evidence">tests/test_patches.py · tests/test_patch_application.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Checkpoints and recovery</h3>
+          <p>Restrictive on-disk checkpoints, restart-safe <code>/undo</code>, interrupted-transaction detection, and state-contained discard through <code>/recovery</code>.</p>
+          <span class="cap-evidence">tests/test_checkpoints.py · tests/test_recovery.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Guarded validation</h3>
+          <p>Detects Python, Node, and Rust commands. Runs argument arrays only, with a secret-free environment, network namespace, timeout, process-group kill, and output caps.</p>
+          <span class="cap-evidence">tests/test_command_execution.py</span>
+        </div>
+        <div class="cap-card">
+          <h3>Sessions and history</h3>
+          <p>Typed snapshots are redacted and written atomically. <code>/sessions</code>, <code>/resume</code>, and <code>/history</code> restore conversation without replaying pending tools.</p>
+          <span class="cap-evidence">tests/test_sessions.py · tests/test_session_storage.py</span>
         </div>
         <div class="cap-card">
           <h3>Read-only subagents</h3>
-          <p>Delegate exploration and review to specialized subagents. They receive only read-only tools and report back with evidence.</p>
-          <span class="cap-evidence">test_subagents.py</span>
+          <p>Explore and Reviewer receive isolated history, filtered read-only tools, fixed step limits, and no recursive delegation. Their reports come back as evidence.</p>
+          <span class="cap-evidence">tests/test_subagents.py</span>
         </div>
         <div class="cap-card">
-          <h3>Trusted approval</h3>
-          <p>Every destructive tool — write, patch, command, delete — opens a modal requesting explicit approval. Models cannot approve their own actions.</p>
-          <span class="cap-evidence">test_agent.py, test_tui.py</span>
+          <h3>Project intelligence</h3>
+          <p>Discovers languages, test frameworks, formatters, and type checkers. Loads the closest upward <code>FORGE.md</code> with explicit precedence and honors ignore and secret-file rules.</p>
+          <span class="cap-evidence">tests/test_discovery.py · tests/test_instructions.py</span>
         </div>
         <div class="cap-card">
-          <h3>Session management</h3>
-          <p>Conversations are saved, named, and restorable. Secrets are redacted before persistence.</p>
-          <span class="cap-evidence">test_sessions.py</span>
+          <h3>Context control</h3>
+          <p>Tracks provider-reported tokens and context percentage, applies per-model limits up to 1,048,576 tokens, and reduces history with <code>/compact</code>.</p>
+          <span class="cap-evidence">tests/test_agent.py · tests/test_tui.py</span>
         </div>
         <div class="cap-card">
-          <h3>Provider normalization</h3>
-          <p>All provider responses are normalized into a single typed interface. Provider-specific behavior stays in the boundary layer.</p>
-          <span class="cap-evidence">test_provider.py</span>
+          <h3>Terminal UX</h3>
+          <p>A responsive Textual interface with a command palette, ten themes, <code>/fast</code> speed profiles, <code>/asn</code> step estimation, and live progress and EFT.</p>
+          <span class="cap-evidence">tests/test_tui.py · tests/test_themes.py</span>
         </div>
       </div>
     </section>
 
     <!-- Commands -->
-    <section>
-      <h2>Terminal commands</h2>
-      <div class="code-block" style="max-width:520px">
-        <code>
-<span class="c-prompt">/help</span>       Show commands
-<span class="c-prompt">/models</span>      List available models
-<span class="c-prompt">/model</span> NAME  Switch the active model
-<span class="c-prompt">/status</span>      Show provider, model, and workspace
-<span class="c-prompt">/usage</span>       Token count and estimated cost
-<span class="c-prompt">/files</span>       List project files
-<span class="c-prompt">/read</span> FILE   Read a UTF-8 text file
-<span class="c-prompt">/tree</span>        Show the project tree
-<span class="c-prompt">/agents</span>      List available subagents
-<span class="c-prompt">/agent</span> NAME  Delegate a task to a subagent
-<span class="c-prompt">/sessions</span>    List saved conversations
-<span class="c-prompt">/new</span>         Start a new conversation
-<span class="c-prompt">/compact</span>     Reduce context when it grows
-<span class="c-prompt">/updates</span>     Check for Forge updates
-<span class="c-prompt">/clear</span>       Clear the display
-<span class="c-prompt">/exit</span>        Exit Forge
-        </code>
-      </div>
+    <section aria-labelledby="commands-title">
+      <p class="eyebrow">Reference</p>
+      <h2 id="commands-title">Terminal commands</h2>
+      <p>Type <code>/</code> to open the filterable command palette, or enter a command directly.</p>
+      <dl class="command-list">
+        <div class="command-row"><dt><code>/help</code></dt><dd>Show the command list</dd></div>
+        <div class="command-row"><dt><code>/status</code></dt><dd>Provider, model, mode, workspace</dd></div>
+        <div class="command-row"><dt><code>/usage</code></dt><dd>Token usage and estimated cost</dd></div>
+        <div class="command-row"><dt><code>/models</code></dt><dd>Open the model picker</dd></div>
+        <div class="command-row"><dt><code>/model</code></dt><dd>Choose or switch the active model</dd></div>
+        <div class="command-row"><dt><code>/files</code></dt><dd>List workspace files</dd></div>
+        <div class="command-row"><dt><code>/read FILE</code></dt><dd>Read a UTF-8 text file</dd></div>
+        <div class="command-row"><dt><code>/tree</code></dt><dd>List workspace files recursively</dd></div>
+        <div class="command-row"><dt><code>/new</code></dt><dd>Start a new conversation</dd></div>
+        <div class="command-row"><dt><code>/sessions</code></dt><dd>List saved sessions</dd></div>
+        <div class="command-row"><dt><code>/resume</code></dt><dd>Resume a saved session</dd></div>
+        <div class="command-row"><dt><code>/history</code></dt><dd>Show conversation history</dd></div>
+        <div class="command-row"><dt><code>/agents</code></dt><dd>List available subagents</dd></div>
+        <div class="command-row"><dt><code>/agent</code></dt><dd>Delegate an objective to a subagent</dd></div>
+        <div class="command-row"><dt><code>/checkpoint</code></dt><dd>List patch checkpoints</dd></div>
+        <div class="command-row"><dt><code>/undo</code></dt><dd>Undo a checkpoint</dd></div>
+        <div class="command-row"><dt><code>/recovery</code></dt><dd>Show recovery state</dd></div>
+        <div class="command-row"><dt><code>/recover</code></dt><dd>Run a recovery action</dd></div>
+        <div class="command-row"><dt><code>/updates</code></dt><dd>Check for Forge updates</dd></div>
+        <div class="command-row"><dt><code>/compact</code></dt><dd>Reduce conversation context</dd></div>
+        <div class="command-row"><dt><code>/asn TASK</code></dt><dd>Estimate the steps a task needs</dd></div>
+        <div class="command-row"><dt><code>/fast</code></dt><dd>Select a speed profile</dd></div>
+        <div class="command-row"><dt><code>/theme</code></dt><dd>Select a theme</dd></div>
+        <div class="command-row"><dt><code>/clear</code></dt><dd>Clear the conversation display</dd></div>
+        <div class="command-row"><dt><code>/exit</code></dt><dd>Exit Forge</dd></div>
+      </dl>
     </section>
 
     <!-- Security -->
-    <section>
-      <h2>Security by design</h2>
+    <section id="security" aria-labelledby="security-title">
+      <p class="eyebrow">Trust</p>
+      <h2 id="security-title">Security by design</h2>
       <ul>
-        <li><strong>No automatic fallback.</strong> If a model request fails, Forge reports the error. It never silently switches providers.</li>
-        <li><strong>Secrets redacted.</strong> Environment variables, API keys, and private key files are not sent to cloud providers.</li>
-        <li><strong>Path containment.</strong> Tools cannot read or write outside the project workspace.</li>
-        <li><strong>Approval gating.</strong> Write, command, and delete operations require user approval through a trusted modal.</li>
-        <li><strong>Prompt-injection defense.</strong> Repository content cannot grant permissions or override configured policies.</li>
-        <li><strong>Execution limits.</strong> Step limits, command timeouts, output caps, and delegation depth prevent runaway agents.</li>
+        <li><strong>Keyring-first credentials.</strong> Forge does not read project <code>.env</code> files and fails closed rather than falling back to plaintext storage.</li>
+        <li><strong>No silent provider fallback.</strong> A failed request is reported; Forge never changes provider or privacy boundary behind your back.</li>
+        <li><strong>Workspace containment.</strong> Traversal and external symlinks are rejected. Restricted secret files and private <code>.forge</code> state are denied to model-facing tools.</li>
+        <li><strong>Prompt-injection defense.</strong> Repository content, comments, and tool output are untrusted data. They cannot grant permissions or override policy.</li>
+        <li><strong>Approval gating.</strong> Writes, patches, commands, and deletions require a trusted one-shot approval. A model cannot approve its own action.</li>
+        <li><strong>Restricted command execution.</strong> Argument arrays only, a secret-free environment, a Linux user/network namespace, timeouts, process-group termination, and bounded output.</li>
+        <li><strong>Redaction by default.</strong> Configured secrets are redacted before terminal rendering, validation records, and persisted sessions.</li>
+        <li><strong>Pinned updates.</strong> Updates require explicit approval and install an exact binary package version; Forge does not execute mutable Git sources.</li>
       </ul>
     </section>
 
     <!-- Roadmap -->
-    <section>
-      <h2>What's next</h2>
-      <p>Forge is in active development. The current milestone delivers the full Textual interface and slash-command surface. Planned work includes:</p>
+    <section id="roadmap" aria-labelledby="roadmap-title">
+      <p class="eyebrow">Status</p>
+      <h2 id="roadmap-title">Current state and next</h2>
+      <p>Forge is a pre-release prototype. The workflow core, patch pipeline, validation boundary, sessions, recovery, subagents, and terminal interface are implemented and covered by executable tests.</p>
+      <p>Remaining work includes:</p>
       <ul>
-        <li>Patch preview and approval with structured diffs</li>
-        <li>Automatic checkpoints and undo</li>
-        <li>FORGE.md project instructions</li>
-        <li>Plugin support with declared permissions</li>
-        <li>Language-server integration for accurate code intelligence</li>
+        <li>Tester and Coder subagents, plus structured subagent reports.</li>
+        <li>A structured event bus with per-tool subagent activity.</li>
+        <li>Slash, path, model, and mention autocomplete.</li>
+        <li>A benchmark suite that measures self-improvement.</li>
+        <li>A cross-platform test matrix and evidence-backed support statement.</li>
+        <li>Clean-environment packaging and release artifacts.</li>
       </ul>
-      <p class="caption">See <a href="https://github.com/Chenboda01/Forge-AI/blob/main/ROADMAP.md">ROADMAP.md</a> for the full plan.</p>
+      <p class="caption">See <a href="https://github.com/Chenboda01/Forge-AI/blob/main/ROADMAP.md">ROADMAP.md</a>, <a href="https://github.com/Chenboda01/Forge-AI/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>, and <a href="https://github.com/Chenboda01/Forge-AI/blob/main/SECURITY.md">SECURITY.md</a> for the authoritative plans and boundaries.</p>
     </section>
 
   </main>
 
   <footer role="contentinfo">
-    <p>Forge v5.0.0 — <a href="https://github.com/Chenboda01/Forge-AI">GitHub</a> — MIT License</p>
+    <p>Forge v5.0.0 — Pre-release — <a href="https://github.com/Chenboda01/Forge-AI">GitHub</a> — MIT License</p>
   </footer>
 </body>
 </html>
