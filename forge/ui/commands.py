@@ -64,8 +64,8 @@ class CommandService:
         return (
             "Commands\n"
             "/help  /status  /usage  /models  /model [NAME]\n"
-            "/files  /read FILE  /tree  /new  /sessions  /resume ID  /history\n"
-            "/agents  /agent NAME OBJECTIVE  /checkpoint  /undo [ID]\n"
+            "/files  /read FILE  /tree  /new  /save [NAME]  /sessions  /resume ID  /history\n"
+            "/agents  /agent NAME OBJECTIVE  /checkpoints  /undo [ID]\n"
             "/recovery  /recover ACTION ID\n"
             "/updates  /compact\n"
             "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit"
@@ -144,6 +144,21 @@ class CommandService:
         runtime.agent.reset()
         return "Started a new conversation."
 
+    def save_session(self, name: str = "") -> str:
+        runtime = self.runtime
+        if runtime is None:
+            return "No session storage is connected."
+        if len(runtime.agent.messages) <= 1:
+            return "Nothing to save yet. Send a message first."
+        meta = runtime.sessions.save(
+            messages=runtime.agent.messages,
+            model=runtime.agent.model_id,
+            input_tokens=runtime.agent.input_tokens,
+            output_tokens=runtime.agent.output_tokens,
+            name=name.strip() or None,
+        )
+        return f"Saved session {meta.id}: {meta.name}"
+
     def sessions_text(self) -> str:
         return sessions_text(self.runtime)
 
@@ -199,6 +214,7 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         "/history": app.commands.history_text,
         "/agents": app.commands.agents_text,
         "/checkpoint": app.commands.checkpoint_text,
+        "/checkpoints": app.commands.checkpoint_text,
         "/recovery": app.commands.recovery_text,
     }
     handler = simple_commands.get(name)
@@ -217,6 +233,9 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         return
     if name == "/resume":
         await app._show_command_result(app.commands.resume_session(argument.strip()))
+        return
+    if name == "/save":
+        await app._show_command_result(app.commands.save_session(argument.strip()))
         return
     if name == "/tree":
         await app._show_command_result(app.commands.list_files(recursive=True))

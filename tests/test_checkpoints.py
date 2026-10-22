@@ -240,6 +240,51 @@ def test_undo_rejects_parent_directory_replacement_before_restore(
     assert external.read_text(encoding="utf-8") == "external\n"
 
 
+def test_checkpoint_command_lists_every_record(monkeypatch, tmp_path: Path) -> None:
+    # Given: two checkpoints created from separate patches
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    first = runtime.checkpoints.create(
+        proposal_for_existing_and_new(tmp_path), task_id="task-first", patch_id="patch-first"
+    )
+    second = runtime.checkpoints.create(
+        proposal_for_existing_and_new(tmp_path), task_id="task-second", patch_id="patch-second"
+    )
+
+    # When: the user asks for the checkpoint list
+    summary = CommandService(runtime).checkpoint_text()
+
+    # Then: every ID, task, and patch is discoverable, newest first
+    assert first.id in summary
+    assert second.id in summary
+    assert "task=task-first" in summary
+    assert "task=task-second" in summary
+    listed = runtime.checkpoints.list_checkpoints()
+    assert {record.id for record in listed} == {first.id, second.id}
+
+
+@pytest.mark.asyncio
+async def test_checkpoints_command_lists_records_through_tui(monkeypatch, tmp_path: Path) -> None:
+    # Given: a running Forge TUI with an existing checkpoint
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    record = runtime.checkpoints.create(
+        proposal_for_existing_and_new(tmp_path), task_id="task-list", patch_id="patch-list"
+    )
+    app = ForgeApp(runtime, skip_startup=True)
+
+    # When: the user invokes /checkpoints through the composer
+    async with app.run_test(size=(100, 32)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "/checkpoints"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the checkpoint ID is visible in the transcript
+        transcript = app.query_one("#conversation", ConversationView).transcript
+        assert record.id in transcript
+
+
 def test_checkpoint_and_undo_commands_use_latest_record(monkeypatch, tmp_path: Path) -> None:
     # Given: a runtime with a checkpoint followed by a simulated edit
     monkeypatch.setenv("FORGE_MODEL", "ollama")

@@ -7,13 +7,19 @@ def checkpoint_text(runtime: ForgeRuntime | None) -> str:
     if runtime is None:
         return "Checkpoints\nNo checkpoint storage is connected."
     incomplete = runtime.checkpoints.incomplete_checkpoints()
-    latest = runtime.checkpoints.latest()
+    try:
+        records = runtime.checkpoints.list_checkpoints()
+    except CheckpointError as error:
+        return f"Checkpoints\n{error}"
     lines = ["Checkpoints"]
-    if latest is None:
+    if not records:
         lines.append("No checkpoints.")
     else:
-        lines.append(f"Latest: {latest.id}  task={latest.task_id}  patch={latest.patch_id}")
-        lines.extend(f"- {file.path}" for file in latest.files)
+        lines.extend(
+            f"{record.id}  {record.created_at}  task={record.task_id}  "
+            f"patch={record.patch_id}  {len(record.files)} file(s)"
+            for record in records
+        )
     lines.extend(f"Incomplete: {name}" for name in incomplete)
     return "\n".join(lines)
 

@@ -86,8 +86,12 @@ class CheckpointManager:
         return record
 
     def latest(self) -> CheckpointRecord | None:
-        records = tuple(self.load(path.stem) for path in self.root.glob("*.json"))
+        records = self.list_checkpoints()
         return max(records, key=lambda record: record.created_at, default=None)
+
+    def list_checkpoints(self) -> tuple[CheckpointRecord, ...]:
+        records = tuple(self.load(path.stem) for path in self.root.glob("*.json"))
+        return tuple(sorted(records, key=lambda record: record.created_at, reverse=True))
 
     def undo(self, checkpoint_id: str) -> CheckpointRecord:
         record = self.load(checkpoint_id)
