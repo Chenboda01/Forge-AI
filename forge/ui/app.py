@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+from collections import deque
 from threading import Event
 from time import monotonic
 
@@ -30,6 +31,27 @@ from forge.ui.widgets import (
 
 APPROVAL_TIMEOUT_SECONDS = 60
 EMA_ALPHA = 0.3
+LOGO_HOLD_SECONDS = 1.2
+STARTUP_PHASE_SECONDS = 0.35
+MAX_QUEUED_MESSAGES = 20
+
+IMMEDIATE_COMMANDS = frozenset(
+    {
+        "/checkpoint",
+        "/checkpoints",
+        "/exit",
+        "/help",
+        "/history",
+        "/queue",
+        "/sessions",
+        "/status",
+        "/usage",
+    }
+)
+
+
+async def _startup_sleep(seconds: float) -> None:
+    await asyncio.sleep(seconds)
 
 
 class ForgeApp(App[None]):
@@ -55,6 +77,7 @@ class ForgeApp(App[None]):
         self.theme = DEFAULT_THEME
         self._approval_decision: Event | None = None
         self._busy = False
+        self._queued_messages: deque[str] = deque()
         self._agent_started_at: float | None = None
         self._agent_max_steps: int = 0
         self._agent_current_step: int = 0
@@ -107,9 +130,11 @@ class ForgeApp(App[None]):
 
     async def _boot_sequence(self) -> None:
         bar = self.query_one(StartupBar)
+        await _startup_sleep(LOGO_HOLD_SECONDS)
+        bar.set_loading_visible(True)
         for i, phase in enumerate(STARTUP_PHASES, start=1):
             bar.set_phase(i, phase)
-            await asyncio.sleep(0.35)
+            await _startup_sleep(STARTUP_PHASE_SECONDS)
         bar.display = False
         shell = self.query_one("#shell", Vertical)
         shell.display = True
@@ -188,13 +213,28 @@ class ForgeApp(App[None]):
         composer.clear()
         if not message:
             return
-        self.keyboard.remember(message)
 
+        if self._busy and not self._is_immediate(message):
+            if not await self._enqueue_message(message):
+                composer.load_text(message)
+                return
+            self.keyboard.remember(message)
+            return
+        self.keyboard.remember(message)
+        await self._submit_message(message)
+
+    @staticmethod
+    def _is_immediate(message: str) -> bool:
+        if not message.startswith("/"):
+            return False
+        return message.split(maxsplit=1)[0].lower() in IMMEDIATE_COMMANDS
+
+    async def _submit_message(self, message: str, *, echo: bool = True) -> None:
         if message.startswith("/"):
             await handle_command(self, message)
             return
-
-        await self._append_entry("YOU", message, "user")
+        if echo:
+            await self._append_entry("YOU", message, "user")
         if message.startswith("@"):
             await self._start_subagent(message[1:])
             return
@@ -209,6 +249,59 @@ class ForgeApp(App[None]):
             self._refresh_sidebar()
         self._set_busy(True)
         self.run_agent(message)
+
+    async def _enqueue_message(self, message: str) -> bool:
+        if len(self._queued_messages) >= MAX_QUEUED_MESSAGES:
+            await self._append_entry(
+                "SYSTEM",
+                f"Queue is full ({MAX_QUEUED_MESSAGES} messages). Wait for Forge to finish.",
+                "error",
+            )
+            return False
+        self._queued_messages.append(message)
+        await self._append_entry("QUEUED", message, "queued")
+        self._refresh_sidebar()
+        return True
+
+    def queue_text(self) -> str:
+        if not self._queued_messages:
+            return (
+                "Queue\nNo queued messages.\nPress Enter while Forge is working to queue a message."
+            )
+        lines = ["Queue", f"{len(self._queued_messages)} pending"]
+        for position, message in enumerate(self._queued_messages, start=1):
+            preview = " ".join(message.split())
+            if len(preview) > 100:
+                preview = preview[:97] + "..."
+            lines.append(f"{position}. {preview}")
+        lines.append("Run /queue clear to remove all queued messages.")
+        return "\n".join(lines)
+
+    def clear_queue(self) -> str:
+        count = len(self._queued_messages)
+        self._queued_messages.clear()
+        self._refresh_sidebar()
+        if count == 0:
+            return "Queue\nNo queued messages."
+        return f"Queue\nCleared {count} queued message(s)."
+
+    def _schedule_queue_drain(self) -> None:
+        if self._queued_messages and not self._busy:
+            self.set_timer(0.01, self._drain_next_queued)
+
+    def _drain_next_queued(self) -> None:
+        if self._busy or not self._queued_messages or not self.is_running:
+            return
+        if not self.query("#sidebar"):
+            return
+        message = self._queued_messages.popleft()
+        self._refresh_sidebar()
+        asyncio.create_task(self._run_queued(message))
+
+    async def _run_queued(self, message: str) -> None:
+        await self._submit_message(message, echo=False)
+        if not self._busy:
+            self._schedule_queue_drain()
 
     def action_insert_composer_newline(self) -> None:
         composer = self.query_one("#composer", TextArea)
@@ -314,7 +407,7 @@ class ForgeApp(App[None]):
             self._refresh_eft()
 
     def _show_eft(self, text: str) -> None:
-        self.query_one("#composer", TextArea).placeholder = text
+        self.query_one("#composer", TextArea).placeholder = f"{text} · Enter queues"
 
     def _refresh_eft(self) -> None:
         if not self._busy or self._agent_started_at is None:
@@ -409,16 +502,19 @@ class ForgeApp(App[None]):
             self.runtime,
             self.session_name,
             self._eft_text,
+            len(self._queued_messages),
         )
         self.query_one("#header", HeaderBar).update_status(self.runtime, self.session_name)
-        self.query_one("#footer", FooterBar).update_status(self.runtime)
+        self.query_one("#footer", FooterBar).update_status(self.runtime, len(self._queued_messages))
 
     def _set_busy(self, busy: bool, label: str = "Working") -> None:
         self._busy = busy
         composer = self.query_one("#composer", TextArea)
         activity = self.query_one("#activity-row", ActivityProgress)
-        composer.disabled = busy
-        composer.placeholder = "Forge is working" if busy else "Ask Forge or enter /help"
+        composer.placeholder = (
+            "Forge is working · Enter queues a message" if busy else "Ask Forge or enter /help"
+        )
+        composer.set_class(busy, "busy")
         if busy:
             self._agent_started_at = None
             self._agent_current_step = 0
@@ -439,4 +535,6 @@ class ForgeApp(App[None]):
             self._eft_timer.pause()
         activity.set_done()
         self._refresh_sidebar()
-        composer.focus()
+        self._schedule_queue_drain()
+        if len(self.screen_stack) == 1:
+            composer.focus()

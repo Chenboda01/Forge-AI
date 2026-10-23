@@ -66,7 +66,7 @@ class CommandService:
             "/help  /status  /usage  /models  /model [NAME]\n"
             "/files  /read FILE  /tree  /new  /save [NAME]  /sessions  /resume ID  /history\n"
             "/agents  /agent NAME OBJECTIVE  /checkpoints  /undo [ID]\n"
-            "/recovery  /recover ACTION ID\n"
+            "/recovery  /recover ACTION ID  /queue [clear]\n"
             "/updates  /compact\n"
             "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit"
         )
@@ -248,6 +248,15 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         return
     if name == "/recover":
         await app._show_command_result(app.commands.recover(argument.strip()))
+        return
+    if name == "/queue":
+        queue_argument = argument.strip().lower()
+        if queue_argument == "clear":
+            await app._show_command_result(app.clear_queue())
+        elif queue_argument:
+            await app._show_command_result("Usage: /queue [clear]")
+        else:
+            await app._show_command_result(app.queue_text())
         return
     if name == "/new":
         output = app.commands.new_session()

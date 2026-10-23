@@ -40,6 +40,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("/recover", "Run a recovery action"),
     CommandSpec("/updates", "Check for updates"),
     CommandSpec("/compact", "Reduce conversation context"),
+    CommandSpec("/queue", "List or clear queued messages"),
     CommandSpec("/asn", "Estimate the steps a task needs"),
     CommandSpec("/fast", "Select a speed profile"),
     CommandSpec("/theme", "Select a theme"),

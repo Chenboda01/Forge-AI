@@ -145,6 +145,12 @@
           <h3>Sessions that survive</h3>
           <p>Explicit <code>/save</code>, redacted atomic snapshots, and <code>/sessions</code>, <code>/resume</code>, and <code>/history</code>. Restarts do not replay pending tool actions.</p>
         </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Input</p>
+          <h3>Queue without waiting</h3>
+          <p>The composer stays editable while Forge works. Enter queues the next message, <code>/queue</code> lists pending work, and <code>/queue clear</code> discards it.</p>
+        </article>
       </div>
     </section>
 
@@ -295,7 +301,7 @@
         </div>
         <div class="cap-card">
           <h3>Terminal UX</h3>
-          <p>A responsive Textual interface with a command palette, ten themes, <code>/fast</code> speed profiles, <code>/asn</code> step estimation, and live progress and EFT.</p>
+          <p>A responsive Textual interface with a command palette, type-ahead queueing, ten themes, <code>/fast</code> speed profiles, <code>/asn</code> step estimation, and live progress and EFT.</p>
           <span class="cap-evidence">tests/test_tui.py · tests/test_themes.py</span>
         </div>
       </div>
@@ -305,7 +311,7 @@
     <section aria-labelledby="commands-title">
       <p class="eyebrow">Reference</p>
       <h2 id="commands-title">Terminal commands</h2>
-      <p>Type <code>/</code> to open the filterable command palette, or enter a command directly.</p>
+      <p>Type <code>/</code> to open the filterable command palette, or enter a command directly. While Forge is working, the composer stays editable: Enter queues your next message, and read-only commands run immediately.</p>
       <dl class="command-list">
         <div class="command-row"><dt><code>/help</code></dt><dd>Show the command list</dd></div>
         <div class="command-row"><dt><code>/status</code></dt><dd>Provider, model, mode, workspace</dd></div>
@@ -329,6 +335,7 @@
         <div class="command-row"><dt><code>/recover</code></dt><dd>Run a recovery action</dd></div>
         <div class="command-row"><dt><code>/updates</code></dt><dd>Check for Forge updates</dd></div>
         <div class="command-row"><dt><code>/compact</code></dt><dd>Reduce conversation context</dd></div>
+        <div class="command-row"><dt><code>/queue [clear]</code></dt><dd>List or clear queued messages</dd></div>
         <div class="command-row"><dt><code>/asn TASK</code></dt><dd>Estimate the steps a task needs</dd></div>
         <div class="command-row"><dt><code>/fast</code></dt><dd>Select a speed profile</dd></div>
         <div class="command-row"><dt><code>/theme</code></dt><dd>Select a theme</dd></div>

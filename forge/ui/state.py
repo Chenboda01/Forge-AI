@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Final
+
+from litellm import get_model_info
 
 from ..checkpoints import CheckpointManager
 from ..forge_core.agent import ForgeAgent
@@ -9,14 +11,6 @@ from ..forge_core.provider import ForgeProvider
 from ..forge_core.sessions import SessionManager
 from ..forge_core.subagents import SubagentRunner
 from ..recovery import RecoveryManager
-
-PRICING: Final[dict[str, tuple[float, float]]] = {
-    "deepseek/deepseek-chat": (0.27, 1.10),
-    "deepseek/deepseek-reasoner": (0.55, 2.19),
-    "openai/gpt-5": (1.25, 10.00),
-    "anthropic/claude-sonnet-4-5": (3.00, 15.00),
-    "gemini/gemini-2.5-flash": (0.15, 0.60),
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,11 +29,27 @@ class ForgeRuntime:
     eft_text: str = ""
 
 
+@lru_cache(maxsize=64)
+def _token_prices(model_id: str) -> tuple[float, float] | None:
+    try:
+        info = get_model_info(model_id)
+    except Exception:
+        # LiteLLM raises a bare Exception for models outside its price table.
+        return None
+    input_price = info.get("input_cost_per_token")
+    output_price = info.get("output_cost_per_token")
+    if input_price is None or output_price is None:
+        return None
+    return input_price, output_price
+
+
 def estimate_cost(agent: ForgeAgent) -> float | None:
-    pricing = PRICING.get(agent.model_id)
+    """Estimate the session cost in USD from provider-reported token usage."""
+    capabilities = getattr(getattr(agent, "provider", None), "capabilities", None)
+    if capabilities is not None and capabilities.local:
+        return 0.0
+    pricing = _token_prices(agent.model_id)
     if pricing is None:
         return None
     input_price, output_price = pricing
-    input_cost = agent.input_tokens / 1_000_000 * input_price
-    output_cost = agent.output_tokens / 1_000_000 * output_price
-    return input_cost + output_cost
+    return agent.input_tokens * input_price + agent.output_tokens * output_price

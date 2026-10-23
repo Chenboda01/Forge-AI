@@ -14,6 +14,17 @@ STARTUP_PHASES = [
     "FORGE ONLINE",
 ]
 
+FORGE_EMBLEM = (
+    "        ▄▄▄▄▄▄▄▄▄▄\n"
+    "     ▄██████████████▄\n"
+    "   ▄██████████████████▄\n"
+    "  ██████████████████████\n"
+    "  ▀▀▀▀▀▀▀██████████▀▀▀▀▀▀▀\n"
+    "         ████████\n"
+    "        ██████████\n"
+    "       ████████████"
+)
+
 FORGE_LOGO = (
     "███████╗ ██████╗ ██████╗  ██████╗ ███████╗\n"
     "██╔════╝██╔═══██╗██╔══██╗██╔════╝ ██╔════╝\n"
@@ -23,8 +34,11 @@ FORGE_LOGO = (
     "╚═╝      ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚══════╝"
 )
 
+STARTUP_TAGLINE = "Shape code. Temper bugs. Ship stronger software."
+
 MESSAGE_PREFIXES = {
     "user": "› ",
+    "queued": "⏳ ",
     "tool": "· ",
     "notice": "· ",
     "error": "✗ ",
@@ -36,10 +50,19 @@ class StartupBar(Vertical):
         super().__init__(id="startup-overlay")
 
     def compose(self) -> ComposeResult:
+        yield Static(FORGE_EMBLEM, id="startup-emblem")
         yield Static(FORGE_LOGO, id="startup-logo")
+        yield Static(STARTUP_TAGLINE, id="startup-tagline")
         yield Static("", id="startup-spacer")
         yield Static("◇ INITIALIZING", id="startup-phase")
         yield Static("\u2591" * 30, id="startup-progress")
+
+    def on_mount(self) -> None:
+        self.set_loading_visible(False)
+
+    def set_loading_visible(self, visible: bool) -> None:
+        self.query_one("#startup-phase").display = visible
+        self.query_one("#startup-progress").display = visible
 
     def set_phase(self, phase_idx: int, label: str) -> None:
         total = len(STARTUP_PHASES)
@@ -105,14 +128,15 @@ class FooterBar(Horizontal):
         )
         yield Static(id="footer-right")
 
-    def update_status(self, runtime: ForgeRuntime | None) -> None:
+    def update_status(self, runtime: ForgeRuntime | None, queued: int = 0) -> None:
+        queue_text = f" · {queued} queued" if queued else ""
         if runtime is None:
-            self.query_one("#footer-right", Static).update("offline")
+            self.query_one("#footer-right", Static).update(f"offline{queue_text}")
             return
         cost = estimate_cost(runtime.agent)
         cost_text = "cost unavailable" if cost is None else f"${cost:.4f}"
         self.query_one("#footer-right", Static).update(
-            f"{runtime.agent.total_tokens:,} tokens \u00b7 {cost_text}"
+            f"{runtime.agent.total_tokens:,} tokens · {cost_text}{queue_text}"
         )
 
 
@@ -155,6 +179,7 @@ class ConversationView(VerticalScroll):
         return "\n".join(self._transcript)
 
     async def append_entry(self, label: str, body: str, kind: str = "notice") -> None:
+        follow_tail = self.is_vertical_scroll_end
         self._transcript.append(f"{label}\n{body}")
         text = Text()
         text.append(MESSAGE_PREFIXES.get(kind, ""))
@@ -162,7 +187,8 @@ class ConversationView(VerticalScroll):
         text.append("\n")
         text.append(body)
         await self.mount(Static(text, classes=f"message message-{kind}"))
-        self.scroll_end(animate=False)
+        if follow_tail:
+            self.scroll_end(animate=False)
 
     async def reset(self) -> None:
         await self.remove_children()
@@ -182,6 +208,7 @@ class StatusRail(Vertical):
         runtime: ForgeRuntime | None,
         session_name: str,
         eft_text: str = "",
+        queued: int = 0,
     ) -> None:
         if runtime is None:
             model = "offline"
@@ -206,6 +233,9 @@ class StatusRail(Vertical):
             "",
             "Session",
             session_name or "Untitled",
+            "",
+            "Queue",
+            f"{queued} pending",
             "",
             "EFT",
             eft_text or "Waiting",

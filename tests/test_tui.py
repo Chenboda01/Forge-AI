@@ -1,7 +1,11 @@
+import asyncio
 import shlex
 from importlib import import_module
 from importlib.util import find_spec
+from threading import Event
 from time import monotonic
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from textual import events
@@ -11,12 +15,13 @@ import forge.forge_core.updates as updates_core
 import forge.ui.app as app_module
 import forge.ui.commands as commands_module
 from forge.forge import build_runtime
+from forge.forge_core.agent import ForgeAgent
 from forge.ui.app import ForgeApp
 from forge.ui.approval import ApprovalScreen
 from forge.ui.commands import CommandService
 from forge.ui.state import estimate_cost
 from forge.ui.theme_select import ThemeSelectScreen
-from forge.ui.widgets import ConversationView
+from forge.ui.widgets import STARTUP_PHASES, ConversationView, StartupBar
 
 
 def test_textual_app_has_dedicated_ui_module() -> None:
@@ -136,6 +141,166 @@ async def test_shift_enter_inserts_composer_newline_without_submitting() -> None
 
         # Then: the composer gains a newline without submitting a message
         assert composer.text == "first line\n"
+
+
+@pytest.mark.asyncio
+async def test_composer_queues_messages_while_agent_is_working(monkeypatch, tmp_path) -> None:
+    # Given: an agent run that stays active until released
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    calls: list[str] = []
+    release = Event()
+
+    def fake_run(message: str) -> None:
+        calls.append(message)
+        if message == "first":
+            release.wait(timeout=5)
+
+    monkeypatch.setattr(runtime.agent, "run", fake_run)
+    app = ForgeApp(runtime, skip_startup=True)
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "first"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # When: the user types and submits a second message mid-run
+        assert app._busy
+        assert not composer.disabled
+        composer.text = "second"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the message is queued, visible, and counted
+        assert list(app._queued_messages) == ["second"]
+        transcript = app.query_one("#conversation", ConversationView).transcript
+        assert "QUEUED\nsecond" in transcript
+        sidebar = str(app.query_one("#sidebar-content", Static).content)
+        assert "Queue\n1 pending" in sidebar
+        footer = app.query_one("#footer-right", Static).render().plain
+        assert "1 queued" in footer
+
+        # When: the active run finishes
+        release.set()
+        for _ in range(50):
+            await pilot.pause()
+            if calls == ["first", "second"]:
+                break
+
+        # Then: the queue drains automatically and stays empty
+        assert calls == ["first", "second"]
+        assert not app._queued_messages
+
+
+@pytest.mark.asyncio
+async def test_queue_command_lists_and_clears_pending_messages() -> None:
+    # Given: a busy Forge with one queued message
+    app = ForgeApp(skip_startup=True)
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        app._set_busy(True)
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "queued task"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # When: the user inspects the queue
+        composer.text = "/queue"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: pending work is visible while the agent keeps running
+        transcript = app.query_one("#conversation", ConversationView).transcript
+        assert "1 pending" in transcript
+        assert "1. queued task" in transcript
+        assert app._busy
+
+        # When: the user clears the queue
+        composer.text = "/queue clear"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: queued work is discarded without stopping the active run
+        assert not app._queued_messages
+        assert (
+            "Cleared 1 queued message(s)."
+            in app.query_one("#conversation", ConversationView).transcript
+        )
+        app._set_busy(False)
+
+
+@pytest.mark.asyncio
+async def test_read_only_commands_bypass_the_queue_while_busy() -> None:
+    # Given: a busy Forge with an empty queue
+    app = ForgeApp(skip_startup=True)
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        app._set_busy(True)
+
+        # When: the user asks for help without waiting
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "/help"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the read-only command runs immediately instead of queueing
+        transcript = app.query_one("#conversation", ConversationView).transcript
+        assert "Commands" in transcript
+        assert not app._queued_messages
+        app._set_busy(False)
+
+
+@pytest.mark.asyncio
+async def test_state_changing_command_is_queued_while_busy() -> None:
+    # Given: a busy Forge
+    app = ForgeApp(skip_startup=True)
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        app._set_busy(True)
+
+        # When: the user submits a command that mutates runtime state
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "/save"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: it waits for the active run instead of executing mid-step
+        assert list(app._queued_messages) == ["/save"]
+        app.clear_queue()
+        app._set_busy(False)
+
+
+@pytest.mark.asyncio
+async def test_conversation_preserves_scroll_when_reader_is_not_at_bottom() -> None:
+    # Given: a conversation scrolled above the tail
+    app = ForgeApp(skip_startup=True)
+
+    async with app.run_test(size=(100, 20)) as pilot:
+        conversation = app.query_one("#conversation", ConversationView)
+        for index in range(30):
+            await conversation.append_entry("FORGE", f"line {index}", "forge")
+        await pilot.pause()
+        conversation.scroll_home(animate=False)
+        await pilot.pause()
+        assert not conversation.is_vertical_scroll_end
+        before = conversation.scroll_offset.y
+
+        # When: new output arrives while the user is reading
+        await conversation.append_entry("FORGE", "reading stays put", "forge")
+        await pilot.pause()
+
+        # Then: the viewport does not jump to the bottom
+        assert conversation.scroll_offset.y == before
+
+        # When: the user is at the tail instead
+        conversation.scroll_end(animate=False)
+        await pilot.pause()
+        await conversation.append_entry("FORGE", "follow the tail", "forge")
+        await pilot.pause()
+
+        # Then: new output keeps following the tail
+        assert conversation.is_vertical_scroll_end
 
 
 @pytest.mark.asyncio
@@ -387,8 +552,20 @@ async def test_five_escape_presses_exit() -> None:
         assert not app.is_running
 
 
-def test_unknown_model_cost_is_unavailable(monkeypatch, tmp_path) -> None:
-    # Given: a configured model without verified pricing data
+def _cost_agent(model_id: str, *, local: bool = False) -> ForgeAgent:
+    return cast(
+        ForgeAgent,
+        SimpleNamespace(
+            model_id=model_id,
+            input_tokens=1_000_000,
+            output_tokens=1_000_000,
+            provider=SimpleNamespace(capabilities=SimpleNamespace(local=local)),
+        ),
+    )
+
+
+def test_local_model_cost_is_zero(monkeypatch, tmp_path) -> None:
+    # Given: a local model with no API billing
     monkeypatch.setenv("FORGE_MODEL", "ollama")
     runtime = build_runtime(tmp_path)
 
@@ -396,10 +573,89 @@ def test_unknown_model_cost_is_unavailable(monkeypatch, tmp_path) -> None:
     cost = estimate_cost(runtime.agent)
     usage = CommandService(runtime).usage_text()
 
+    # Then: Forge reports a real zero instead of an unavailable price
+    assert cost == 0.0
+    assert "$0.0000" in usage
+    assert "unavailable" not in usage.lower()
+
+
+@pytest.mark.asyncio
+async def test_sidebar_shows_local_cost_as_zero(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    app = ForgeApp(runtime, skip_startup=True)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        content = str(app.query_one("#sidebar-content", Static).content)
+
+        assert "Cost\n$0.0000" in content
+        assert "Unavailable" not in content
+
+
+def test_mapped_cloud_model_cost_is_estimated() -> None:
+    # Given: a cloud model with a published per-token price
+    agent = _cost_agent("deepseek/deepseek-flash")
+
+    # When: one million input and output tokens are priced
+    cost = estimate_cost(agent)
+
+    # Then: Forge returns a positive estimate
+    assert cost is not None
+    assert cost > 0
+
+
+def test_unmapped_model_cost_is_unavailable() -> None:
+    # Given: a cloud model without a published price table entry
+    agent = _cost_agent("custom/unmapped-model")
+
+    # When: cost is calculated for the user
+    cost = estimate_cost(agent)
+
     # Then: Forge does not misrepresent unknown cost as zero
     assert cost is None
-    assert "unavailable" in usage.lower()
-    assert "$0.0000" not in usage
+
+
+@pytest.mark.asyncio
+async def test_startup_holds_logo_before_showing_loading_bar(monkeypatch) -> None:
+    # Given: a controllable startup clock
+    sleeps: list[float] = []
+    release_logo = asyncio.Event()
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+        if len(sleeps) == 1:
+            await release_logo.wait()
+        else:
+            await asyncio.sleep(0)
+
+    monkeypatch.setattr(app_module, "_startup_sleep", fake_sleep)
+    app = ForgeApp()
+
+    # When: the application mounts while the logo hold is still in progress
+    async with app.run_test(size=(100, 40)) as pilot:
+        await pilot.pause()
+        bar = app.query_one(StartupBar)
+
+        # Then: only the logo and tagline are visible
+        assert bar.display
+        assert app.query_one("#startup-emblem").display
+        assert app.query_one("#startup-logo").display
+        assert app.query_one("#startup-tagline").display
+        assert not app.query_one("#startup-phase").display
+        assert not app.query_one("#startup-progress").display
+        assert sleeps == [app_module.LOGO_HOLD_SECONDS]
+
+        # When: the logo hold completes
+        release_logo.set()
+        for _ in range(10):
+            await pilot.pause()
+
+        # Then: the loading bar ran after the hold and the shell replaced the splash
+        assert not bar.display
+        assert app.query_one("#shell").display
+        assert sleeps[0] == app_module.LOGO_HOLD_SECONDS
+        assert sleeps[1:] == [app_module.STARTUP_PHASE_SECONDS] * len(STARTUP_PHASES)
 
 
 def test_approval_timeout_is_bounded(monkeypatch) -> None:
