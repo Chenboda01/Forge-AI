@@ -1,3 +1,5 @@
+from .models import MODELS
+
 SYSTEM_PROMPT = """
 You are Forge, an AI coding agent operating inside a project workspace.
 
@@ -25,3 +27,21 @@ Delegation:
 - Give one clear objective, relevant context, constraints, and expected output.
 - Treat subagent reports as evidence, not unquestionable truth.
 """.strip()
+
+
+def _model_identity(model_id: str) -> str:
+    for model in MODELS.values():
+        if model.model_id == model_id:
+            return f"{model.name} (`{model_id}`), provided by {model.provider}"
+    return f"`{model_id}`"
+
+
+def build_system_prompt(model_id: str) -> str:
+    return (
+        f"{SYSTEM_PROMPT}\n\n"
+        "[ACTIVE MODEL]\n"
+        f"You are currently running as {_model_identity(model_id)}.\n"
+        "When the user asks which model you are, state this identity exactly. "
+        "Do not claim you cannot inspect your own model identity or guess a different model. "
+        "This value is supplied by Forge's runtime configuration for the current session."
+    )

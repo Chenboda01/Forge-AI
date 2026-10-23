@@ -13,7 +13,7 @@ from .agent_limits import (
     AgentLimits,
     ToolCallState,
 )
-from .agent_prompt import SYSTEM_PROMPT
+from .agent_prompt import build_system_prompt
 from .approval import render_approval_details
 from .context import (
     ContextBudgetError,
@@ -128,9 +128,10 @@ class ForgeAgent:
         self.output_tokens = 0
 
     def _system_prompt(self) -> str:
-        return self.project_instructions.with_core_prompt(SYSTEM_PROMPT)
+        return self.project_instructions.with_core_prompt(build_system_prompt(self.model_id))
 
     def run(self, user_message: str) -> str:
+        self.messages[0] = {"role": "system", "content": self._system_prompt()}
         limits = AgentLimits(
             max_steps=self.max_steps,
             max_tool_calls=self.max_tool_calls,

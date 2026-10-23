@@ -50,6 +50,48 @@ def test_runtime_model_loops_use_the_normalized_provider(monkeypatch, tmp_path) 
     assert not hasattr(subagent_module, "completion")
 
 
+def test_system_prompt_declares_the_active_model() -> None:
+    # Given: an agent using a registered model
+    agent = ForgeAgent(StubProvider("deepseek/deepseek-flash"), ToolRegistry())
+
+    # When: the system prompt is built
+    prompt = str(agent.messages[0]["content"])
+
+    # Then: Forge knows its current model identity
+    assert "[ACTIVE MODEL]" in prompt
+    assert "DeepSeek V4.1 Flash" in prompt
+    assert "deepseek/deepseek-flash" in prompt
+
+
+def test_system_prompt_refreshes_after_model_switch() -> None:
+    # Given: an agent that already built a prompt for one model
+    provider = StubProvider("deepseek/deepseek-flash")
+    provider.handler = lambda _request: CompletionResponse("ok", (), TokenUsage(0, 0), "stop")
+    agent = ForgeAgent(provider, ToolRegistry())
+    assert "DeepSeek V4.1 Flash" in str(agent.messages[0]["content"])
+
+    # When: the provider switches models and a new turn starts
+    provider.model_id = "deepseek/deepseek-v4-pro"
+    assert agent.run("hello") == "ok"
+
+    # Then: the system prompt reports the new model instead of the stale one
+    prompt = str(agent.messages[0]["content"])
+    assert "DeepSeek V4 Pro" in prompt
+    assert "deepseek/deepseek-v4-pro" in prompt
+    assert "DeepSeek V4.1 Flash" not in prompt
+
+
+def test_system_prompt_falls_back_to_raw_model_id_for_custom_models() -> None:
+    # Given: an agent using a model outside Forge's registry
+    agent = ForgeAgent(StubProvider("custom/private-model"), ToolRegistry())
+
+    # When: the system prompt is built
+    prompt = str(agent.messages[0]["content"])
+
+    # Then: Forge still receives the exact configured identifier without guessing a name
+    assert "`custom/private-model`" in prompt
+
+
 class RecordingPresenter:
     def __init__(self, approved: bool = False) -> None:
         self.events: list[tuple[str, str]] = []
