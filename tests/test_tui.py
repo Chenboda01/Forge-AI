@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 from textual import events
-from textual.widgets import ProgressBar, Static, TextArea
+from textual.widgets import OptionList, ProgressBar, Static, TextArea
 
 import forge.forge_core.updates as updates_core
 import forge.ui.app as app_module
@@ -20,6 +20,7 @@ from forge.ui.app import ForgeApp
 from forge.ui.approval import ApprovalScreen
 from forge.ui.commands import CommandService
 from forge.ui.state import estimate_cost
+from forge.ui.subagent_select import SubagentSelectScreen
 from forge.ui.theme_select import ThemeSelectScreen
 from forge.ui.widgets import STARTUP_PHASES, ConversationView, StartupBar
 
@@ -85,8 +86,8 @@ async def test_help_command_stays_inside_conversation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_theme_choice_accepts_arrows_and_enter() -> None:
-    app = ForgeApp(skip_startup=True)
+async def test_theme_choice_accepts_arrows_and_enter(tmp_path) -> None:
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
 
     async with app.run_test(size=(100, 32)) as pilot:
         composer = app.query_one("#composer", TextArea)
@@ -103,7 +104,7 @@ async def test_theme_choice_accepts_arrows_and_enter() -> None:
         await pilot.pause()
 
         assert not isinstance(app.screen, ThemeSelectScreen)
-        assert app._current_theme == "cyber"
+        assert app.active_theme == "cyber"
         assert str(app.screen.styles.background) == "Color(10, 10, 20)"
 
 
@@ -410,30 +411,91 @@ async def test_connected_runtime_renders_status_chrome(monkeypatch, tmp_path) ->
         left = app.query_one("#header-left", Static).render().plain
         footer = app.query_one("#footer-left", Static).render().plain
 
-        # Then: the active mode/model and primary keyboard hint are visible
+        # Then: the active mode/model, saved theme, and primary keyboard hint are visible
         assert runtime.agent.mode.value in header
         assert runtime.agent.model_id.rsplit("/", maxsplit=1)[-1] in header
+        assert app.active_theme in header
         assert "\u25c6 FORGE " in left
         assert "enter send" in footer
+        sidebar = str(app.query_one("#sidebar-content", Static).content)
+        assert "Agents\n2 ready" in sidebar
 
 
 @pytest.mark.asyncio
-async def test_agents_command_lists_restored_roles() -> None:
+async def test_agents_command_opens_browser_with_details(tmp_path) -> None:
     # Given: a mounted Forge composer
-    app = ForgeApp(skip_startup=True)
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
 
     async with app.run_test(size=(100, 32)) as pilot:
         composer = app.query_one("#composer", TextArea)
 
-        # When: the user asks for available agents
+        # When: the user opens the subagent browser
         composer.text = "/agents"
         await pilot.press("enter")
         await pilot.pause()
 
-        # Then: both restored read-only roles are visible
+        # Then: both restored read-only roles and the active role's tools are visible
+        assert isinstance(app.screen, SubagentSelectScreen)
+        options = app.screen.query_one("#agents-options", OptionList)
+        assert options.option_count == 2
+        assert options.get_option_at_index(0).id == "explore"
+        assert options.get_option_at_index(1).id == "reviewer"
+        detail = str(app.screen.query_one("#agents-detail", Static).content)
+        assert "EXPLORE" in detail
+        assert "read_file" in detail
+        assert "Step limit" in detail
+
+        # When: the user selects the highlighted role
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the composer is prepared for an explicit delegation
+        assert not isinstance(app.screen, SubagentSelectScreen)
+        assert composer.text == "/agent explore "
+        assert "Subagent explore" in app.query_one("#conversation", ConversationView).transcript
+
+
+@pytest.mark.asyncio
+async def test_agents_command_shows_named_role_details(tmp_path) -> None:
+    # Given: a mounted Forge composer
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+
+        # When: the user requests one named subagent without opening the browser
+        composer.text = "/agents reviewer"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the trusted UI shows tools, limits, and invocation forms
         transcript = app.query_one("#conversation", ConversationView).transcript
-        assert "explore" in transcript
-        assert "reviewer" in transcript
+        assert "Subagent reviewer" in transcript
+        assert "git_diff" in transcript
+        assert "Step limit" in transcript
+        assert "/agent reviewer OBJECTIVE" in transcript
+
+
+@pytest.mark.asyncio
+async def test_settings_command_reports_user_preferences(tmp_path) -> None:
+    # Given: a user with an explicit preferences location
+    preferences_path = tmp_path / "preferences.toml"
+    app = ForgeApp(skip_startup=True, preferences_path=preferences_path)
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+
+        # When: the user inspects settings
+        composer.text = "/settings"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the storage location, theme, and user scope are explicit
+        transcript = app.query_one("#conversation", ConversationView).transcript
+        assert "Settings" in transcript
+        assert str(preferences_path) in transcript
+        assert "Theme: ember" in transcript
+        assert "per operating-system user" in transcript
 
 
 @pytest.mark.asyncio

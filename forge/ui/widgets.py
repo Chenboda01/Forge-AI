@@ -90,7 +90,9 @@ class HeaderBar(Horizontal):
         yield Static(id="header-left")
         yield Static(id="header-right")
 
-    def update_status(self, runtime: ForgeRuntime | None, session_name: str) -> None:
+    def update_status(
+        self, runtime: ForgeRuntime | None, session_name: str, theme: str = ""
+    ) -> None:
         if runtime is None:
             mode = "offline"
             model = "offline"
@@ -105,12 +107,13 @@ class HeaderBar(Horizontal):
         label = session_name or "untitled"
         if directory:
             label = f"{label} \u00b7 {directory}"
+        theme_text = f" \u00b7 {theme}" if theme else ""
         wordmark = Text()
         wordmark.append("\u25c6 FORGE", style="bold")
         wordmark.append(f"   {label}")
         self.query_one("#header-left", Static).update(wordmark)
         self.query_one("#header-right", Static).update(
-            f"{mode} \u00b7 {model} \u00b7 ctx {context:.0f}%"
+            f"{mode} \u00b7 {model} \u00b7 ctx {context:.0f}%{theme_text}"
         )
 
 
@@ -209,6 +212,8 @@ class StatusRail(Vertical):
         session_name: str,
         eft_text: str = "",
         queued: int = 0,
+        agents_ready: int = 0,
+        active_subagent: str = "",
     ) -> None:
         if runtime is None:
             model = "offline"
@@ -228,6 +233,7 @@ class StatusRail(Vertical):
         filled = min(int(context / 10), 10)
         bar = "#" * filled + "-" * (10 - filled)
         cost_text = "Unavailable" if cost is None else f"${cost:.4f}"
+        agent_text = f"{active_subagent} active" if active_subagent else f"{agents_ready} ready"
         sections: Iterable[str] = (
             "FORGE",
             "",
@@ -236,6 +242,9 @@ class StatusRail(Vertical):
             "",
             "Queue",
             f"{queued} pending",
+            "",
+            "Agents",
+            agent_text,
             "",
             "EFT",
             eft_text or "Waiting",

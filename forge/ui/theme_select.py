@@ -15,15 +15,24 @@ class ThemeSelectScreen(ModalScreen[str]):
         Binding("down", "focus_next", "Down", show=False, priority=True),
     ]
 
+    def __init__(self, current: str | None = None) -> None:
+        super().__init__()
+        self._current = current if current in THEMES else None
+
     def compose(self) -> ComposeResult:
         with Vertical(id="theme-dialog"):
             yield Static("Select theme", id="theme-title")
-            yield Static("↑↓ enter · esc to cancel", id="theme-subtitle")
+            yield Static(
+                "↑↓ enter · esc to cancel · selection is saved per user",
+                id="theme-subtitle",
+            )
             for name in _NAMES:
-                yield Button(f" {name} ", id=f"theme-{name}", variant="default")
+                marker = " · active" if name == self._current else ""
+                yield Button(f" {name}{marker} ", id=f"theme-{name}", variant="default")
 
     def on_mount(self) -> None:
-        self.query_one("#theme-ember", Button).focus()
+        target = self._current or "ember"
+        self.query_one(f"#theme-{target}", Button).focus()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id

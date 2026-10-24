@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from forge.forge_core.provider import ForgeProviderError
@@ -11,6 +12,7 @@ from forge.ui.model_select import ModelSelectScreen
 from forge.ui.recovery_commands import recover, recovery_text
 from forge.ui.session_commands import history_text, resume_session, sessions_text
 from forge.ui.state import ForgeRuntime, estimate_cost
+from forge.ui.subagent_select import SubagentSelectScreen
 from forge.ui.theme_select import ThemeSelectScreen
 from forge.ui.themes import THEMES
 from forge.ui.updates import start_update
@@ -63,9 +65,9 @@ class CommandService:
     def help_text() -> str:
         return (
             "Commands\n"
-            "/help  /status  /usage  /models  /model [NAME]\n"
+            "/help  /status  /usage  /settings  /models  /model [NAME]\n"
             "/files  /read FILE  /tree  /new  /save [NAME]  /sessions  /resume ID  /history\n"
-            "/agents  /agent NAME OBJECTIVE  /checkpoints  /undo [ID]\n"
+            "/agents [NAME]  /agent NAME OBJECTIVE  /checkpoints  /undo [ID]\n"
             "/recovery  /recover ACTION ID  /queue [clear]\n"
             "/updates  /compact\n"
             "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit"
@@ -75,6 +77,42 @@ class CommandService:
     def agents_text() -> str:
         return "Agents\n" + "\n".join(
             f"{name:<12} {spec.description}" for name, spec in SUBAGENTS.items()
+        )
+
+    @staticmethod
+    def subagent_text(name: str) -> str:
+        spec = SUBAGENTS.get(name.lower())
+        if spec is None:
+            available = ", ".join(sorted(SUBAGENTS))
+            return f"Unknown subagent: {name}. Available subagents: {available}"
+        tools = "\n".join(f"  · {tool}" for tool in spec.allowed_tools)
+        return "\n".join(
+            (
+                f"Subagent {spec.name}",
+                spec.description,
+                "",
+                "Tools",
+                tools,
+                "",
+                "Step limit",
+                f"  {spec.max_steps}",
+                "",
+                "Invoke",
+                f"  /agent {spec.name} OBJECTIVE",
+                f"  @{spec.name} OBJECTIVE",
+            )
+        )
+
+    @staticmethod
+    def settings_text(preferences_path: Path, theme: str) -> str:
+        return "\n".join(
+            (
+                "Settings",
+                f"Preferences: {preferences_path}",
+                f"Theme: {theme}",
+                "Scope: per operating-system user, outside the workspace.",
+                "Run /theme to choose and save a different theme.",
+            )
         )
 
     def status_text(self) -> str:
@@ -212,7 +250,6 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         "/files": app.commands.list_files,
         "/sessions": app.commands.sessions_text,
         "/history": app.commands.history_text,
-        "/agents": app.commands.agents_text,
         "/checkpoint": app.commands.checkpoint_text,
         "/checkpoints": app.commands.checkpoint_text,
         "/recovery": app.commands.recovery_text,
@@ -239,6 +276,18 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         return
     if name == "/tree":
         await app._show_command_result(app.commands.list_files(recursive=True))
+        return
+    if name == "/agents":
+        agent_argument = argument.strip()
+        if agent_argument:
+            await app._show_command_result(app.commands.subagent_text(agent_argument))
+        else:
+            await _agents_select(app)
+        return
+    if name == "/settings":
+        await app._show_command_result(
+            app.commands.settings_text(app.preferences_path, app.active_theme)
+        )
         return
     if name == "/agent":
         await app._start_subagent(argument.strip())
@@ -304,14 +353,29 @@ async def _fast_select(app: ForgeApp) -> None:
 
 
 async def _theme_select(app: ForgeApp) -> None:
-    screen = ThemeSelectScreen()
+    screen = ThemeSelectScreen(app.active_theme)
 
     async def selected(name: str | None) -> None:
         if name and name in THEMES:
-            app.apply_theme(name)
-            await app._show_command_result(f"Theme set to {name}.")
+            error = app.apply_theme(name)
+            if error:
+                await app._show_command_result(
+                    f"Theme set to {name}, but the preference was not saved: {error}"
+                )
+            else:
+                await app._show_command_result(
+                    f"Theme set to {name}. Saved to {app.preferences_path}."
+                )
 
     await app.push_screen(screen, callback=selected)
+
+
+async def _agents_select(app: ForgeApp) -> None:
+    async def selected(agent_name: str | None) -> None:
+        if agent_name:
+            await app._prepare_subagent(agent_name)
+
+    await app.push_screen(SubagentSelectScreen(), callback=selected)
 
 
 async def _model_select(app: ForgeApp) -> None:

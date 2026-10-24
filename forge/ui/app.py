@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 from collections import deque
+from pathlib import Path
 from threading import Event
 from time import monotonic
 
@@ -11,6 +12,13 @@ from textual.containers import Horizontal, Vertical
 from textual.widgets import Button, OptionList, TextArea
 
 from forge.forge_core.agent import AgentError, AgentInterruptedError
+from forge.forge_core.preferences import (
+    PreferencesError,
+    UiPreferences,
+    get_user_preferences_path,
+    load_preferences,
+    save_preferences,
+)
 from forge.forge_core.subagents import SUBAGENTS, SubagentError, SubagentInterruptedError
 from forge.ui.approval import ApprovalScreen
 from forge.ui.command_palette import CommandPaletteScreen
@@ -37,6 +45,7 @@ MAX_QUEUED_MESSAGES = 20
 
 IMMEDIATE_COMMANDS = frozenset(
     {
+        "/agents",
         "/checkpoint",
         "/checkpoints",
         "/exit",
@@ -44,6 +53,7 @@ IMMEDIATE_COMMANDS = frozenset(
         "/history",
         "/queue",
         "/sessions",
+        "/settings",
         "/status",
         "/usage",
     }
@@ -64,19 +74,42 @@ class ForgeApp(App[None]):
         Binding("enter", "submit_composer", priority=True, show=False),
     ]
 
-    def __init__(self, runtime: ForgeRuntime | None = None, *, skip_startup: bool = False) -> None:
+    def __init__(
+        self,
+        runtime: ForgeRuntime | None = None,
+        *,
+        skip_startup: bool = False,
+        preferences_path: Path | None = None,
+    ) -> None:
         super().__init__()
         self.runtime = runtime
         self.commands = CommandService(runtime)
         self.keyboard = KeyboardController()
         self.session_name = ""
         self._skip_startup = skip_startup
-        self._current_theme = DEFAULT_THEME
+        self._preferences_path = preferences_path or get_user_preferences_path()
+        self._preferences_error = ""
+        initial_theme = DEFAULT_THEME
+        try:
+            preferences = load_preferences(self._preferences_path)
+        except (PreferencesError, OSError) as error:
+            self._preferences_error = str(error)
+        else:
+            saved_theme = preferences.theme
+            if saved_theme is not None:
+                if saved_theme in THEMES:
+                    initial_theme = saved_theme
+                else:
+                    self._preferences_error = (
+                        f"Unknown saved theme '{saved_theme}'; using {DEFAULT_THEME}."
+                    )
+        self._current_theme = initial_theme
         for theme in THEMES.values():
             self.register_theme(theme)
-        self.theme = DEFAULT_THEME
+        self.theme = initial_theme
         self._approval_decision: Event | None = None
         self._busy = False
+        self._active_subagent: str | None = None
         self._queued_messages: deque[str] = deque()
         self._agent_started_at: float | None = None
         self._agent_max_steps: int = 0
@@ -117,16 +150,39 @@ class ForgeApp(App[None]):
                 "Shape code. Temper bugs. Ship stronger software.\nEnter /help for commands.",
                 "forge",
             )
+            await self._report_preferences_error()
         else:
             shell = self.query_one("#shell", Vertical)
             shell.display = False
             asyncio.create_task(self._boot_sequence())
 
-    def apply_theme(self, name: str) -> None:
+    @property
+    def preferences_path(self) -> Path:
+        return self._preferences_path
+
+    @property
+    def active_theme(self) -> str:
+        return self._current_theme
+
+    def apply_theme(self, name: str, *, persist: bool = True) -> str | None:
+        """Apply a theme and persist it for this operating-system user."""
         if name not in THEMES:
-            return
+            return None
         self._current_theme = name
         self.theme = name
+        if self.is_running:
+            self._refresh_sidebar()
+        if not persist:
+            return None
+        try:
+            save_preferences(UiPreferences(theme=name), self._preferences_path)
+        except (PreferencesError, OSError) as error:
+            return str(error)
+        return None
+
+    async def _report_preferences_error(self) -> None:
+        if self._preferences_error:
+            await self._append_entry("SYSTEM", f"Preferences: {self._preferences_error}", "error")
 
     async def _boot_sequence(self) -> None:
         bar = self.query_one(StartupBar)
@@ -143,6 +199,7 @@ class ForgeApp(App[None]):
             "Shape code. Temper bugs. Ship stronger software.\nEnter /help for commands.",
             "forge",
         )
+        await self._report_preferences_error()
 
     def on_resize(self, event: events.Resize) -> None:
         is_wide = event.size.width >= 72
@@ -312,6 +369,13 @@ class ForgeApp(App[None]):
         await self._append_entry("SYSTEM", output, "notice")
         self._refresh_sidebar()
 
+    async def _prepare_subagent(self, agent_name: str) -> None:
+        await self._show_command_result(self.commands.subagent_text(agent_name))
+        composer = self.query_one("#composer", TextArea)
+        composer.load_text(f"/agent {agent_name} ")
+        composer.focus()
+        composer.cursor_location = (0, len(composer.text))
+
     async def _start_subagent(self, request: str) -> None:
         parts = request.split(maxsplit=1)
         if len(parts) != 2 or not parts[1].strip():
@@ -332,6 +396,7 @@ class ForgeApp(App[None]):
             f"Delegating to {agent_name}: {objective}",
             "notice",
         )
+        self._active_subagent = agent_name
         self._set_busy(True, label=f"{agent_name} working")
         self.run_subagent(agent_name, objective)
 
@@ -369,8 +434,11 @@ class ForgeApp(App[None]):
                 "forge",
             )
         finally:
-            self.call_from_thread(self._set_busy, False)
-            self.call_from_thread(self._refresh_sidebar)
+            self.call_from_thread(self._complete_subagent)
+
+    def _complete_subagent(self) -> None:
+        self._active_subagent = None
+        self._set_busy(False)
 
     @work(thread=True, exclusive=True, group="agent")
     def compact_conversation(self) -> None:
@@ -503,8 +571,14 @@ class ForgeApp(App[None]):
             self.session_name,
             self._eft_text,
             len(self._queued_messages),
+            agents_ready=len(SUBAGENTS),
+            active_subagent=self._active_subagent or "",
         )
-        self.query_one("#header", HeaderBar).update_status(self.runtime, self.session_name)
+        self.query_one("#header", HeaderBar).update_status(
+            self.runtime,
+            self.session_name,
+            self._current_theme,
+        )
         self.query_one("#footer", FooterBar).update_status(self.runtime, len(self._queued_messages))
 
     def _set_busy(self, busy: bool, label: str = "Working") -> None:

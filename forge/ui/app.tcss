@@ -373,3 +373,48 @@ CommandPaletteScreen {
     max-height: 20;
     background: $surface-elevated;
 }
+
+SubagentSelectScreen {
+    align: center middle;
+    background: $surface-canvas 70%;
+}
+
+#agents-dialog {
+    width: 84;
+    max-width: 95%;
+    height: auto;
+    max-height: 85%;
+    padding: 2;
+    background: $surface-elevated;
+    border: solid $accent-primary;
+}
+
+#agents-title {
+    height: 2;
+    color: $accent-active;
+    text-style: bold;
+}
+
+#agents-subtitle {
+    height: 2;
+    color: $text-secondary;
+    margin-bottom: 1;
+}
+
+#agents-body {
+    height: 22;
+}
+
+#agents-options {
+    width: 30;
+    height: 100%;
+    border: solid $border-subtle;
+}
+
+#agents-detail {
+    width: 1fr;
+    height: 100%;
+    padding: 0 2;
+    color: $text-secondary;
+    overflow-y: auto;
+}
