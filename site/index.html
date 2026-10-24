@@ -123,6 +123,18 @@
         </article>
 
         <article class="latest-card">
+          <p class="latest-kicker">Preferences</p>
+          <h3>Your theme, remembered</h3>
+          <p><code>/theme</code> saves the choice per operating-system user under <code>$XDG_CONFIG_HOME/forge</code>, so restarts keep it and shared machines stay separate. <code>/settings</code> shows the active theme and file path.</p>
+        </article>
+
+        <article class="latest-card">
+          <p class="latest-kicker">Agents</p>
+          <h3>Inspect before you delegate</h3>
+          <p><code>/agents</code> opens a browser with each read-only role's description, tools, step limit, and delegation command. Pick a role to preload the composer.</p>
+        </article>
+
+        <article class="latest-card">
           <p class="latest-kicker">Herdr</p>
           <h3>Herdr pane aware</h3>
           <p>Inside a Herdr pane, Forge reports working, blocked, and idle lifecycle states, then releases them on exit. Outside Herdr it is a no-op.</p>
@@ -286,8 +298,8 @@
         </div>
         <div class="cap-card">
           <h3>Read-only subagents</h3>
-          <p>Explore and Reviewer receive isolated history, filtered read-only tools, fixed step limits, and no recursive delegation. Their reports come back as evidence.</p>
-          <span class="cap-evidence">tests/test_subagents.py</span>
+          <p>Explore and Reviewer receive isolated history, filtered read-only tools, fixed step limits, and no recursive delegation. <code>/agents</code> browses each role before delegating, and reports come back as evidence.</p>
+          <span class="cap-evidence">tests/test_subagents.py · tests/test_tui.py</span>
         </div>
         <div class="cap-card">
           <h3>Project intelligence</h3>
@@ -301,8 +313,8 @@
         </div>
         <div class="cap-card">
           <h3>Terminal UX</h3>
-          <p>A responsive Textual interface with a command palette, type-ahead queueing, ten themes, <code>/fast</code> speed profiles, <code>/asn</code> step estimation, and live progress and EFT.</p>
-          <span class="cap-evidence">tests/test_tui.py · tests/test_themes.py</span>
+          <p>A responsive Textual interface with a command palette, type-ahead queueing, ten themes saved per user, a subagent browser, <code>/fast</code> speed profiles, <code>/asn</code> step estimation, and live progress and EFT.</p>
+          <span class="cap-evidence">tests/test_tui.py · tests/test_themes.py · tests/test_preferences.py</span>
         </div>
       </div>
     </section>
@@ -326,7 +338,7 @@
         <div class="command-row"><dt><code>/sessions</code></dt><dd>List saved sessions</dd></div>
         <div class="command-row"><dt><code>/resume</code></dt><dd>Resume a saved session</dd></div>
         <div class="command-row"><dt><code>/history</code></dt><dd>Show conversation history</dd></div>
-        <div class="command-row"><dt><code>/agents</code></dt><dd>List available subagents</dd></div>
+        <div class="command-row"><dt><code>/agents [NAME]</code></dt><dd>Browse subagents or inspect one role's tools and limits</dd></div>
         <div class="command-row"><dt><code>/agent</code></dt><dd>Delegate an objective to a subagent</dd></div>
         <div class="command-row"><dt><code>/checkpoints</code></dt><dd>List every patch checkpoint and its ID</dd></div>
         <div class="command-row"><dt><code>/checkpoint</code></dt><dd>Alias for /checkpoints</dd></div>
@@ -338,7 +350,8 @@
         <div class="command-row"><dt><code>/queue [clear]</code></dt><dd>List or clear queued messages</dd></div>
         <div class="command-row"><dt><code>/asn TASK</code></dt><dd>Estimate the steps a task needs</dd></div>
         <div class="command-row"><dt><code>/fast</code></dt><dd>Select a speed profile</dd></div>
-        <div class="command-row"><dt><code>/theme</code></dt><dd>Select a theme</dd></div>
+        <div class="command-row"><dt><code>/theme</code></dt><dd>Select a theme; saved per user</dd></div>
+        <div class="command-row"><dt><code>/settings</code></dt><dd>Show saved preferences and their path</dd></div>
         <div class="command-row"><dt><code>/clear</code></dt><dd>Clear the conversation display</dd></div>
         <div class="command-row"><dt><code>/exit</code></dt><dd>Exit Forge</dd></div>
       </dl>
