@@ -76,7 +76,7 @@ uv run forge chat --mode build
 
 Themes are selected with `/theme` and saved for the current operating-system user in `$XDG_CONFIG_HOME/forge/preferences.toml` (default `~/.config/forge/preferences.toml`), so the choice survives restarts and shared machines keep separate preferences. `/settings` reports the active theme and preference path. The preferences file accepts only the `ui` table; unknown sections or keys are rejected instead of being silently ignored.
 
-`/agents` opens a browser for the read-only subagents. Each entry shows its description, allowed tools, step limit, and delegation command; selecting a role preloads the composer with `/agent NAME`. `/agents NAME` prints the same detail directly. The status rail shows how many subagents are ready and which one is active while delegation runs.
+`/agents` opens a browser for the read-only subagents. Each entry shows its description, allowed tools, step limit, and delegation command; selecting a role preloads the composer with `/agent NAME`. `/agents NAME` prints the same detail directly. Press `Ctrl+X` then `A` to open the same browser without typing a command; the leader window lasts two seconds. The status rail shows how many subagents are ready and which one is active while delegation runs.
 
 ## Workspace and Patches
 
