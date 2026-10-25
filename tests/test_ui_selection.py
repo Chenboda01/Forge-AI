@@ -5,6 +5,8 @@ from forge.forge import build_runtime
 from forge.ui.app import ForgeApp
 from forge.ui.command_palette import COMMANDS, CommandPaletteScreen
 from forge.ui.model_select import ModelSelectScreen
+from forge.ui.theme_select import ThemeSelectScreen
+from forge.ui.themes import THEMES
 from forge.ui.widgets import ConversationView
 
 
@@ -123,3 +125,56 @@ async def test_model_picker_requires_a_connected_runtime() -> None:
             "No model runtime is connected."
             in app.query_one("#conversation", ConversationView).transcript
         )
+
+
+@pytest.mark.asyncio
+async def test_theme_picker_wraps_up_and_keeps_the_focused_theme_visible() -> None:
+    # Given: a short terminal where ten theme buttons cannot all fit
+    app = ForgeApp(skip_startup=True)
+    async with app.run_test(size=(100, 24)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "/theme"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, ThemeSelectScreen)
+        dialog = app.screen.query_one("#theme-dialog")
+
+        # When: the user presses up from the first theme to wrap to the last
+        await pilot.press("up")
+        await pilot.pause()
+        focused = app.screen.focused
+
+        # Then: the last theme is focused and scrolled inside the dialog
+        assert focused is not None
+        assert focused.id == f"theme-{list(THEMES)[-1]}"
+        assert dialog.region.bottom <= 24
+        assert focused.region.y >= dialog.region.y
+        assert focused.region.bottom <= dialog.region.bottom
+
+
+@pytest.mark.asyncio
+async def test_command_palette_scrolls_inside_a_short_terminal() -> None:
+    # Given: a command palette on a terminal too short for every command
+    app = ForgeApp(skip_startup=True)
+    async with app.run_test(size=(100, 24)) as pilot:
+        await pilot.press("slash")
+        await pilot.pause()
+        dialog = app.screen.query_one("#palette-dialog")
+        options = app.screen.query_one("#palette-options", OptionList)
+
+        # Then: the dialog and its list stay inside the terminal
+        assert dialog.region.bottom <= 24
+        assert options.region.bottom <= dialog.region.bottom
+
+        # When: the user walks down the list and then back up
+        for _ in range(20):
+            await pilot.press("down")
+            await pilot.pause()
+        highlighted = options.highlighted
+        assert highlighted is not None
+        assert options.scroll_y > 0
+        await pilot.press("up")
+        await pilot.pause()
+
+        # Then: the up arrow moves the highlighted command instead of sticking
+        assert options.highlighted == highlighted - 1

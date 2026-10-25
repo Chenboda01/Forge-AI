@@ -46,4 +46,6 @@ class FastSelectScreen(ModalScreen[str]):
         focused = self.focused
         idx = _IDS.index(focused.id) if focused is not None and focused.id in _IDS else 0
         new_idx = (idx + delta) % len(_IDS)
-        self.query_one(f"#{_IDS[new_idx]}", Button).focus()
+        target = self.query_one(f"#{_IDS[new_idx]}", Button)
+        target.focus()
+        target.scroll_visible(animate=False)

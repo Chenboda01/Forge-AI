@@ -68,7 +68,7 @@ class CommandService:
             "/files  /read FILE  /tree  /new  /save [NAME]  /sessions  /resume ID  /history\n"
             "/agents [NAME]  /agent NAME OBJECTIVE  /checkpoints  /undo [ID]\n"
             "/recovery  /recover ACTION ID  /queue [clear]\n"
-            "/updates  /compact\n"
+            "/force-stop  /updates  /compact\n"
             "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit\n"
             "Keys\n"
             "ctrl+x a  open the subagent browser  ctrl+q quit"
@@ -313,6 +313,9 @@ async def handle_command(app: ForgeApp, command: str) -> None:
         app.session_name = ""
         await app.query_one("#conversation", ConversationView).reset()
         await app._show_command_result(output)
+        return
+    if name == "/force-stop":
+        await app.force_stop()
         return
     if name == "/compact":
         if app.runtime is None:

@@ -50,4 +50,6 @@ class ThemeSelectScreen(ModalScreen[str]):
         ids = [f"theme-{n}" for n in _NAMES]
         idx = ids.index(focused.id) if focused is not None and focused.id in ids else 0
         new_idx = (idx + delta) % len(ids)
-        self.query_one(f"#{ids[new_idx]}", Button).focus()
+        target = self.query_one(f"#{ids[new_idx]}", Button)
+        target.focus()
+        target.scroll_visible(animate=False)

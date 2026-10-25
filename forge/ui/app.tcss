@@ -261,10 +261,12 @@ FastSelectScreen {
 
 #fast-dialog {
     width: 42;
-    height: auto;
+    height: 85%;
+    max-height: 85%;
     padding: 2;
     background: $surface-elevated;
     border: solid $accent-primary;
+    overflow-y: auto;
 }
 
 #fast-title {
@@ -295,10 +297,12 @@ ThemeSelectScreen {
 
 #theme-dialog {
     width: 28;
-    height: auto;
+    height: 85%;
+    max-height: 85%;
     padding: 2;
     background: $surface-elevated;
     border: solid $accent-primary;
+    overflow-y: auto;
 }
 
 #theme-title {
@@ -331,7 +335,7 @@ CommandPaletteScreen {
 #model-dialog {
     width: 84;
     max-width: 95%;
-    height: auto;
+    height: 85%;
     max-height: 85%;
     padding: 2;
     background: $surface-elevated;
@@ -341,7 +345,7 @@ CommandPaletteScreen {
 #palette-dialog {
     width: 72;
     max-width: 95%;
-    height: auto;
+    height: 85%;
     max-height: 85%;
     padding: 2;
     background: $surface-elevated;
@@ -369,8 +373,7 @@ CommandPaletteScreen {
 
 #model-options,
 #palette-options {
-    height: auto;
-    max-height: 20;
+    height: 1fr;
     background: $surface-elevated;
 }
 
@@ -382,7 +385,7 @@ SubagentSelectScreen {
 #agents-dialog {
     width: 84;
     max-width: 95%;
-    height: auto;
+    height: 85%;
     max-height: 85%;
     padding: 2;
     background: $surface-elevated;
@@ -402,7 +405,7 @@ SubagentSelectScreen {
 }
 
 #agents-body {
-    height: 22;
+    height: 1fr;
 }
 
 #agents-options {
@@ -417,4 +420,59 @@ SubagentSelectScreen {
     padding: 0 2;
     color: $text-secondary;
     overflow-y: auto;
+}
+
+ForceStopScreen {
+    align: center middle;
+    background: $surface-canvas 70%;
+}
+
+#force-dialog {
+    width: 78;
+    max-width: 95%;
+    height: auto;
+    max-height: 85%;
+    padding: 2;
+    background: $surface-elevated;
+    border: solid $accent-primary;
+}
+
+#force-title {
+    height: 2;
+    color: $accent-active;
+    text-style: bold;
+}
+
+#force-subtitle {
+    height: 2;
+    color: $text-secondary;
+    margin-bottom: 1;
+}
+
+#force-options {
+    height: 5;
+}
+
+#force-options Button {
+    width: 1fr;
+    height: 3;
+    margin: 0 1;
+}
+
+#force-options Button:focus {
+    border: solid $accent-active;
+}
+
+#force-question {
+    height: auto;
+    min-height: 2;
+    margin-top: 1;
+    color: $text-primary;
+    text-style: bold;
+}
+
+#force-detail {
+    height: auto;
+    min-height: 3;
+    color: $text-secondary;
 }

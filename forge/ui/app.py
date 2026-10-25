@@ -24,6 +24,13 @@ from forge.forge_core.subagents import SUBAGENTS, SubagentError, SubagentInterru
 from forge.ui.approval import ApprovalScreen
 from forge.ui.command_palette import CommandPaletteScreen
 from forge.ui.commands import CommandService, handle_command
+from forge.ui.force_stop import (
+    CHOICE_KEEP,
+    ForceStopScreen,
+    checkpoint_baseline,
+    revert_force_stop,
+    turn_checkpoint_ids,
+)
 from forge.ui.keyboard import KeyboardController, request_interrupt
 from forge.ui.state import ForgeRuntime
 from forge.ui.subagent_select import SubagentSelectScreen
@@ -41,6 +48,7 @@ from forge.ui.widgets import (
 
 APPROVAL_TIMEOUT_SECONDS = 60
 EMA_ALPHA = 0.3
+FORCE_STOP_TIMEOUT_SECONDS = 15.0
 LOGO_HOLD_SECONDS = 1.2
 STARTUP_PHASE_SECONDS = 0.35
 MAX_QUEUED_MESSAGES = 20
@@ -51,6 +59,7 @@ IMMEDIATE_COMMANDS = frozenset(
         "/checkpoint",
         "/checkpoints",
         "/exit",
+        "/force-stop",
         "/help",
         "/history",
         "/queue",
@@ -112,6 +121,7 @@ class ForgeApp(App[None]):
         self.theme = initial_theme
         self._approval_decision: Event | None = None
         self._busy = False
+        self._turn_checkpoint_baseline: frozenset[str] | None = None
         self._active_subagent: str | None = None
         self._queued_messages: deque[str] = deque()
         self._agent_started_at: float | None = None
@@ -153,6 +163,76 @@ class ForgeApp(App[None]):
                 await self._prepare_subagent(agent_name)
 
         await self.push_screen(SubagentSelectScreen(), callback=selected)
+
+    async def force_stop(self) -> None:
+        """Cancel the active run, wait for its edit to settle, then ask what to revert."""
+        if not self._busy:
+            await self._append_entry("SYSTEM", "Force stop\nForge is not working.", "notice")
+            return
+        composer = self.query_one("#composer", TextArea)
+        composer.disabled = True
+        cleared = len(self._queued_messages)
+        self._queued_messages.clear()
+        self._refresh_sidebar()
+        note = "Force stop requested. Waiting for the current edit to finish safely..."
+        if cleared:
+            note += f" Discarded {cleared} queued message(s)."
+        await request_interrupt(self, note=note)
+        if not await self._wait_for_agent_idle(FORCE_STOP_TIMEOUT_SECONDS):
+            composer.disabled = False
+            await self._append_entry(
+                "SYSTEM",
+                "Force stop: Forge is still stopping; nothing was reverted. Try /force-stop again.",
+                "error",
+            )
+            return
+        checkpoint_ids = (
+            turn_checkpoint_ids(self.runtime, self._turn_checkpoint_baseline)
+            if self.runtime is not None and self._turn_checkpoint_baseline is not None
+            else None
+        )
+
+        def selected(choice: str | None) -> None:
+            self._force_stop_selected(choice, checkpoint_ids)
+
+        await self.push_screen(ForceStopScreen(), callback=selected)
+
+    def _force_stop_selected(
+        self,
+        choice: str | None,
+        checkpoint_ids: tuple[str, ...] | None,
+    ) -> None:
+        self.keyboard.reset_escape()
+        asyncio.create_task(self._finish_force_stop(choice, checkpoint_ids))
+
+    async def _finish_force_stop(
+        self,
+        choice: str | None,
+        checkpoint_ids: tuple[str, ...] | None,
+    ) -> None:
+        composer = self.query_one("#composer", TextArea)
+        try:
+            if choice is None:
+                await self._append_entry("SYSTEM", "Force stop cancelled. Changes kept.", "notice")
+                return
+            if choice == CHOICE_KEEP:
+                await self._append_entry(
+                    "SYSTEM", "Force stop: Forge stopped; changes kept.", "notice"
+                )
+                return
+            result = revert_force_stop(self.runtime, checkpoint_ids, choice)
+            await self._append_entry("SYSTEM", result, "notice")
+        finally:
+            composer.disabled = False
+            if len(self.screen_stack) == 1:
+                composer.focus()
+            self._refresh_sidebar()
+
+    async def _wait_for_agent_idle(self, timeout: float) -> bool:
+        deadline = monotonic() + timeout
+        while self._busy and monotonic() < deadline:
+            await asyncio.sleep(0.05)
+        return not self._busy
 
     def compose(self) -> ComposeResult:
         with Vertical(id="shell"):
@@ -623,6 +703,7 @@ class ForgeApp(App[None]):
         )
         composer.set_class(busy, "busy")
         if busy:
+            self._turn_checkpoint_baseline = checkpoint_baseline(self.runtime)
             self._agent_started_at = None
             self._agent_current_step = 0
             self._agent_max_steps = 0

@@ -39,6 +39,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec("/undo", "Undo a checkpoint"),
     CommandSpec("/recovery", "Show recovery state"),
     CommandSpec("/recover", "Run a recovery action"),
+    CommandSpec("/force-stop", "Stop Forge and decide what to revert"),
     CommandSpec("/updates", "Check for updates"),
     CommandSpec("/compact", "Reduce conversation context"),
     CommandSpec("/queue", "List or clear queued messages"),
