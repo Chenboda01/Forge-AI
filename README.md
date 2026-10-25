@@ -78,6 +78,8 @@ Themes are selected with `/theme` and saved for the current operating-system use
 
 `/agents` opens a browser for the read-only subagents. Each entry shows its description, allowed tools, step limit, and delegation command; selecting a role preloads the composer with `/agent NAME`. `/agents NAME` prints the same detail directly. Press `Ctrl+X` then `A` to open the same browser without typing a command; the leader window lasts two seconds. The status rail shows how many subagents are ready and which one is active while delegation runs.
 
+`/force-stop` interrupts an active run after the edit in progress settles, then asks what to do with the changes: keep them, revert only the current edit, or revert every change from the task. Use the left and right arrows and Enter to choose, or Esc to cancel without reverting. The composer and queued messages are cleared before the run is interrupted.
+
 ## Workspace and Patches
 
 Forge confines model-facing filesystem operations to the resolved workspace. It rejects traversal, external symlinks, restricted credential files, private `.forge` state, binary text reads, and oversized reads. `.gitignore`, `.forgeignore`, built-in exclusions, and secret-file rules constrain context selection.
