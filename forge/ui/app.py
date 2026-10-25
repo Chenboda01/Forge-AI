@@ -355,10 +355,10 @@ class ForgeApp(App[None]):
             return
 
         self.keyboard.reset_escape()
-        composer = self.query_one("#composer", TextArea)
         if event.key not in {"up", "down"}:
             return
-        if not composer.has_focus or composer.disabled:
+        composer = self.query_one("#composer", TextArea)
+        if len(self.screen_stack) != 1 or self.focused is not composer or composer.disabled:
             return
         value = self.keyboard.previous(composer.text) if event.key == "up" else self.keyboard.next()
         if value is None:
