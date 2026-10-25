@@ -12,7 +12,6 @@ from forge.ui.model_select import ModelSelectScreen
 from forge.ui.recovery_commands import recover, recovery_text
 from forge.ui.session_commands import history_text, resume_session, sessions_text
 from forge.ui.state import ForgeRuntime, estimate_cost
-from forge.ui.subagent_select import SubagentSelectScreen
 from forge.ui.theme_select import ThemeSelectScreen
 from forge.ui.themes import THEMES
 from forge.ui.updates import start_update
@@ -70,7 +69,9 @@ class CommandService:
             "/agents [NAME]  /agent NAME OBJECTIVE  /checkpoints  /undo [ID]\n"
             "/recovery  /recover ACTION ID  /queue [clear]\n"
             "/updates  /compact\n"
-            "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit"
+            "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit\n"
+            "Keys\n"
+            "ctrl+x a  open the subagent browser  ctrl+q quit"
         )
 
     @staticmethod
@@ -371,11 +372,7 @@ async def _theme_select(app: ForgeApp) -> None:
 
 
 async def _agents_select(app: ForgeApp) -> None:
-    async def selected(agent_name: str | None) -> None:
-        if agent_name:
-            await app._prepare_subagent(agent_name)
-
-    await app.push_screen(SubagentSelectScreen(), callback=selected)
+    await app.open_subagent_browser()
 
 
 async def _model_select(app: ForgeApp) -> None:

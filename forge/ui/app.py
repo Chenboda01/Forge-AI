@@ -9,6 +9,7 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.timer import Timer
 from textual.widgets import Button, OptionList, TextArea
 
 from forge.forge_core.agent import AgentError, AgentInterruptedError
@@ -25,6 +26,7 @@ from forge.ui.command_palette import CommandPaletteScreen
 from forge.ui.commands import CommandService, handle_command
 from forge.ui.keyboard import KeyboardController, request_interrupt
 from forge.ui.state import ForgeRuntime
+from forge.ui.subagent_select import SubagentSelectScreen
 from forge.ui.themes import DEFAULT_THEME, THEMES
 from forge.ui.widgets import (
     STARTUP_PHASES,
@@ -70,6 +72,7 @@ class ForgeApp(App[None]):
     CSS_PATH = "app.tcss"
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit"),
+        Binding("ctrl+x", "leader", show=False, priority=True),
         Binding("shift+enter", "insert_composer_newline", priority=True, show=False),
         Binding("enter", "submit_composer", priority=True, show=False),
     ]
@@ -118,8 +121,38 @@ class ForgeApp(App[None]):
         self._eft_timer = None
         self._last_step_time: float | None = None
         self._ema_step_duration: float = 0.0
+        self._leader_pending = False
+        self._leader_timer: Timer | None = None
         if runtime is not None:
             runtime.agent.presenter = self
+
+    async def on_event(self, event: events.Event) -> None:
+        if self._leader_pending and isinstance(event, events.Key):
+            self._clear_leader()
+            if event.key.lower() == "a":
+                event.stop()
+                await self.open_subagent_browser()
+                return
+        await super().on_event(event)
+
+    def action_leader(self) -> None:
+        self._leader_pending = True
+        if self._leader_timer is not None:
+            self._leader_timer.stop()
+        self._leader_timer = self.set_timer(2.0, self._clear_leader)
+
+    def _clear_leader(self) -> None:
+        self._leader_pending = False
+        if self._leader_timer is not None:
+            self._leader_timer.stop()
+            self._leader_timer = None
+
+    async def open_subagent_browser(self) -> None:
+        async def selected(agent_name: str | None) -> None:
+            if agent_name:
+                await self._prepare_subagent(agent_name)
+
+        await self.push_screen(SubagentSelectScreen(), callback=selected)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="shell"):

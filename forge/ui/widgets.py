@@ -126,7 +126,7 @@ class FooterBar(Horizontal):
     def compose(self) -> ComposeResult:
         yield Static(
             "enter send \u00b7 shift+enter newline \u00b7 \u2191\u2193 history "
-            "\u00b7 /help commands \u00b7 ctrl+q quit",
+            "\u00b7 /help commands \u00b7 ctrl+x a agents \u00b7 ctrl+q quit",
             id="footer-left",
         )
         yield Static(id="footer-right")

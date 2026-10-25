@@ -456,6 +456,35 @@ async def test_agents_command_opens_browser_with_details(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_leader_shortcut_opens_agents_browser(tmp_path) -> None:
+    # Given: a mounted Forge composer
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+
+        # When: the user presses ctrl+x then a
+        await pilot.press("ctrl+x")
+        await pilot.press("a")
+        await pilot.pause()
+
+        # Then: the subagent browser opens and the chord leaves no text behind
+        assert isinstance(app.screen, SubagentSelectScreen)
+        assert composer.text == ""
+
+        # When: the browser closes and the user types normally
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, SubagentSelectScreen)
+        composer.focus()
+        await pilot.press("a")
+        await pilot.pause()
+
+        # Then: plain typing still reaches the composer
+        assert composer.text == "a"
+
+
+@pytest.mark.asyncio
 async def test_agents_command_shows_named_role_details(tmp_path) -> None:
     # Given: a mounted Forge composer
     app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
