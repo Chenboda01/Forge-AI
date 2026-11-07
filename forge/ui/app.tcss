@@ -162,6 +162,16 @@ Screen {
     color: $text-primary;
 }
 
+CommandSuggest {
+    display: none;
+    width: 100%;
+    height: auto;
+    max-height: 8;
+    padding: 0 1;
+    border: round $accent-primary;
+    background: $surface-elevated;
+}
+
 #activity-row {
     width: 100%;
     height: 2;
@@ -326,8 +336,7 @@ ThemeSelectScreen {
     border: solid $accent-active;
 }
 
-ModelSelectScreen,
-CommandPaletteScreen {
+ModelSelectScreen {
     align: center middle;
     background: $surface-canvas 70%;
 }
@@ -342,37 +351,23 @@ CommandPaletteScreen {
     border: solid $accent-primary;
 }
 
-#palette-dialog {
-    width: 72;
-    max-width: 95%;
-    height: 85%;
-    max-height: 85%;
-    padding: 2;
-    background: $surface-elevated;
-    border: solid $accent-primary;
-}
-
-#model-title,
-#palette-title {
+#model-title {
     height: 2;
     color: $accent-active;
     text-style: bold;
 }
 
-#model-subtitle,
-#palette-subtitle {
+#model-subtitle {
     height: 2;
     color: $text-secondary;
     margin-bottom: 1;
 }
 
-#model-filter,
-#palette-filter {
+#model-filter {
     margin-bottom: 1;
 }
 
-#model-options,
-#palette-options {
+#model-options {
     height: 1fr;
     background: $surface-elevated;
 }
@@ -420,6 +415,17 @@ SubagentSelectScreen {
     padding: 0 2;
     color: $text-secondary;
     overflow-y: auto;
+}
+
+#agents-talk {
+    height: 1;
+    margin-top: 1;
+    color: $text-secondary;
+}
+
+#agents-prompt {
+    display: none;
+    margin-top: 1;
 }
 
 ForceStopScreen {

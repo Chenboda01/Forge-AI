@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 from textual import events
-from textual.widgets import OptionList, ProgressBar, Static, TextArea
+from textual.widgets import Checkbox, Input, OptionList, ProgressBar, Static, TextArea
 
 import forge.forge_core.updates as updates_core
 import forge.ui.app as app_module
@@ -445,30 +445,28 @@ async def test_agents_command_opens_browser_with_details(tmp_path) -> None:
         assert "read_file" in detail
         assert "Step limit" in detail
 
-        # When: the user selects the highlighted role
+        # When: the user selects the highlighted role with talk off
         await pilot.press("enter")
         await pilot.pause()
 
-        # Then: the composer is prepared for an explicit delegation
+        # Then: the browser closes without preloading a delegation
         assert not isinstance(app.screen, SubagentSelectScreen)
-        assert composer.text == "/agent explore "
-        assert "Subagent explore" in app.query_one("#conversation", ConversationView).transcript
+        assert composer.text == ""
 
 
 @pytest.mark.asyncio
-async def test_leader_shortcut_opens_agents_browser(tmp_path) -> None:
+async def test_ctrl_x_opens_agents_browser_immediately(tmp_path) -> None:
     # Given: a mounted Forge composer
     app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
 
     async with app.run_test(size=(100, 32)) as pilot:
         composer = app.query_one("#composer", TextArea)
 
-        # When: the user presses ctrl+x then a
+        # When: the user presses ctrl+x
         await pilot.press("ctrl+x")
-        await pilot.press("a")
         await pilot.pause()
 
-        # Then: the subagent browser opens and the chord leaves no text behind
+        # Then: the subagent browser opens and the shortcut leaves no text behind
         assert isinstance(app.screen, SubagentSelectScreen)
         assert composer.text == ""
 
@@ -482,6 +480,63 @@ async def test_leader_shortcut_opens_agents_browser(tmp_path) -> None:
 
         # Then: plain typing still reaches the composer
         assert composer.text == "a"
+
+
+@pytest.mark.asyncio
+async def test_agents_browser_moves_between_agents_with_arrows(tmp_path) -> None:
+    # Given: an open subagent browser
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "/agents"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert isinstance(app.screen, SubagentSelectScreen)
+        options = app.screen.query_one("#agents-options", OptionList)
+
+        # When: the user moves right and then left across the agent list
+        await pilot.press("right")
+        await pilot.pause()
+        assert options.highlighted == 1
+        await pilot.press("left")
+        await pilot.pause()
+
+        # Then: the highlight returns to the first agent
+        assert options.highlighted == 0
+
+
+@pytest.mark.asyncio
+async def test_agents_talk_toggle_reveals_the_prompt(tmp_path) -> None:
+    # Given: an open subagent browser with talk disabled
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+        composer.text = "/agents"
+        await pilot.press("enter")
+        await pilot.pause()
+        talk = app.screen.query_one("#agents-talk", Checkbox)
+        prompt = app.screen.query_one("#agents-prompt", Input)
+        assert not talk.value
+        assert not prompt.display
+
+        # When: the user enables talk
+        talk.value = True
+        await pilot.pause()
+
+        # Then: the prompt appears focused for the selected agent
+        assert prompt.display
+        assert app.screen.focused is prompt
+
+        # When: the user sends the prompt without a connected runtime
+        prompt.value = "review the diff"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the browser closes without preloading the composer
+        assert not isinstance(app.screen, SubagentSelectScreen)
+        assert composer.text == ""
 
 
 @pytest.mark.asyncio

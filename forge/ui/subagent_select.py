@@ -3,69 +3,130 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import OptionList, Static
+from textual.widgets import Checkbox, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
 from forge.forge_core.subagents import SUBAGENTS
+from forge.ui.subagent_session import SubagentSession
 
 
-class SubagentSelectScreen(ModalScreen[str]):
-    """Browse registered read-only subagents, their tools, and limits."""
+class SubagentSelectScreen(ModalScreen[tuple[str, str] | None]):
+    """Browse session-scoped subagents and optionally talk to one."""
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel", show=False, priority=True),
+        Binding("left", "previous_agent", "Previous", show=False),
+        Binding("right", "next_agent", "Next", show=False),
     ]
+
+    def __init__(self, session: SubagentSession | None = None) -> None:
+        super().__init__()
+        self.session = session or SubagentSession()
+        self._current = next(iter(SUBAGENTS), "")
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agents-dialog"):
             yield Static("Subagents", id="agents-title")
             yield Static(
-                "↑↓ inspect · enter prepare delegation · esc to cancel",
+                "←→ switch · ↑↓ inspect · enter act · esc close",
                 id="agents-subtitle",
             )
             with Horizontal(id="agents-body"):
                 yield OptionList(id="agents-options")
                 yield Static(id="agents-detail")
+            yield Checkbox("Talk", id="agents-talk")
+            yield Input(placeholder="Message the selected subagent", id="agents-prompt")
 
     def on_mount(self) -> None:
         options = self.query_one("#agents-options", OptionList)
         for name, spec in SUBAGENTS.items():
-            options.add_option(Option(f"{name:<10} {spec.max_steps} steps", id=name))
+            state = self.session.state(name)
+            options.add_option(
+                Option(f"{name:<10} {state.status:<8} {spec.max_steps} steps", id=name)
+            )
         options.focus()
         options.action_first()
-        first_name = next(iter(SUBAGENTS), "")
-        if first_name:
-            self._show_detail(first_name)
+        if self._current:
+            self._show_detail(self._current)
+        self.query_one("#agents-prompt", Input).display = False
 
     @on(OptionList.OptionHighlighted, "#agents-options")
     def show_highlighted(self, event: OptionList.OptionHighlighted) -> None:
         if event.option_id is not None:
+            self._current = event.option_id
             self._show_detail(event.option_id)
 
     @on(OptionList.OptionSelected, "#agents-options")
     def select_agent(self, event: OptionList.OptionSelected) -> None:
         if event.option_id is not None:
-            self.dismiss(event.option_id)
+            self._activate(event.option_id)
+
+    @on(Checkbox.Changed, "#agents-talk")
+    def toggle_talk(self, event: Checkbox.Changed) -> None:
+        prompt = self.query_one("#agents-prompt", Input)
+        prompt.display = event.value
+        if event.value:
+            prompt.focus()
+        else:
+            prompt.value = ""
+            self.query_one("#agents-options", OptionList).focus()
+
+    @on(Input.Submitted, "#agents-prompt")
+    def submit_prompt(self, event: Input.Submitted) -> None:
+        text = event.value.strip()
+        if text and self._current:
+            self.dismiss((self._current, text))
+
+    def action_previous_agent(self) -> None:
+        options = self.query_one("#agents-options", OptionList)
+        options.focus()
+        options.action_cursor_up()
+
+    def action_next_agent(self) -> None:
+        options = self.query_one("#agents-options", OptionList)
+        options.focus()
+        options.action_cursor_down()
 
     def action_cancel(self) -> None:
         self.dismiss(None)
+
+    def _activate(self, name: str) -> None:
+        talk = self.query_one("#agents-talk", Checkbox)
+        prompt = self.query_one("#agents-prompt", Input)
+        if not talk.value:
+            self.dismiss(None)
+            return
+        text = prompt.value.strip()
+        if not text:
+            prompt.focus()
+            return
+        self.dismiss((name, text))
 
     def _show_detail(self, name: str) -> None:
         spec = SUBAGENTS.get(name)
         if spec is None:
             return
+        state = self.session.state(name)
         tools = "\n".join(f"  · {tool}" for tool in spec.allowed_tools)
+        report = state.last_report.strip() or "None yet."
         detail = "\n".join(
             (
                 spec.name.upper(),
                 "",
                 spec.description,
                 "",
+                "Status",
+                f"  {state.status}",
+                f"  {state.runs} run(s) this session",
+                "",
                 "Tools",
                 tools,
                 "",
                 "Step limit",
                 f"  {spec.max_steps}",
+                "",
+                "Last report",
+                report,
                 "",
                 "Invoke",
                 f"  /agent {spec.name} OBJECTIVE",

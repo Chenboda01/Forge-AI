@@ -9,8 +9,7 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.timer import Timer
-from textual.widgets import Button, OptionList, TextArea
+from textual.widgets import Button, Input, OptionList, TextArea
 
 from forge.forge_core.agent import AgentError, AgentInterruptedError
 from forge.forge_core.preferences import (
@@ -22,7 +21,7 @@ from forge.forge_core.preferences import (
 )
 from forge.forge_core.subagents import SUBAGENTS, SubagentError, SubagentInterruptedError
 from forge.ui.approval import ApprovalScreen
-from forge.ui.command_palette import CommandPaletteScreen
+from forge.ui.command_palette import COMMANDS, CommandSuggest
 from forge.ui.commands import CommandService, handle_command
 from forge.ui.force_stop import (
     CHOICE_KEEP,
@@ -34,6 +33,7 @@ from forge.ui.force_stop import (
 from forge.ui.keyboard import KeyboardController, request_interrupt
 from forge.ui.state import ForgeRuntime
 from forge.ui.subagent_select import SubagentSelectScreen
+from forge.ui.subagent_session import SubagentSession
 from forge.ui.themes import DEFAULT_THEME, THEMES
 from forge.ui.widgets import (
     STARTUP_PHASES,
@@ -81,7 +81,7 @@ class ForgeApp(App[None]):
     CSS_PATH = "app.tcss"
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit"),
-        Binding("ctrl+x", "leader", show=False, priority=True),
+        Binding("ctrl+x", "open_agents", show=False, priority=True),
         Binding("shift+enter", "insert_composer_newline", priority=True, show=False),
         Binding("enter", "submit_composer", priority=True, show=False),
     ]
@@ -131,38 +131,27 @@ class ForgeApp(App[None]):
         self._eft_timer = None
         self._last_step_time: float | None = None
         self._ema_step_duration: float = 0.0
-        self._leader_pending = False
-        self._leader_timer: Timer | None = None
+        self.subagent_session = SubagentSession()
         if runtime is not None:
             runtime.agent.presenter = self
 
-    async def on_event(self, event: events.Event) -> None:
-        if self._leader_pending and isinstance(event, events.Key):
-            self._clear_leader()
-            if event.key.lower() == "a":
-                event.stop()
-                await self.open_subagent_browser()
-                return
-        await super().on_event(event)
-
-    def action_leader(self) -> None:
-        self._leader_pending = True
-        if self._leader_timer is not None:
-            self._leader_timer.stop()
-        self._leader_timer = self.set_timer(2.0, self._clear_leader)
-
-    def _clear_leader(self) -> None:
-        self._leader_pending = False
-        if self._leader_timer is not None:
-            self._leader_timer.stop()
-            self._leader_timer = None
+    async def action_open_agents(self) -> None:
+        await self.open_subagent_browser()
 
     async def open_subagent_browser(self) -> None:
-        async def selected(agent_name: str | None) -> None:
-            if agent_name:
-                await self._prepare_subagent(agent_name)
+        def selected(request: tuple[str, str] | None) -> None:
+            composer = self.query_one("#composer", TextArea)
+            if request is None:
+                if len(self.screen_stack) == 1:
+                    composer.focus()
+                return
+            agent_name, prompt = request
+            asyncio.create_task(self._start_subagent(f"{agent_name} {prompt}"))
 
-        await self.push_screen(SubagentSelectScreen(), callback=selected)
+        await self.push_screen(
+            SubagentSelectScreen(self.subagent_session),
+            callback=selected,
+        )
 
     async def force_stop(self) -> None:
         """Cancel the active run, wait for its edit to settle, then ask what to revert."""
@@ -242,6 +231,7 @@ class ForgeApp(App[None]):
                     yield EftBanner()
                     yield ConversationView()
                     yield ActivityProgress()
+                    yield CommandSuggest()
                     yield TextArea(
                         "",
                         placeholder="Ask Forge or enter /help",
@@ -321,30 +311,52 @@ class ForgeApp(App[None]):
             self.query_one("#header-right").display = is_wide
             self.query_one("#footer-right").display = is_wide
 
-    async def on_text_area_changed(self, event: TextArea.Changed) -> None:
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
         if event.text_area.id != "composer":
             return
-        if event.text_area.text != "/":
+        suggest = self.query_one(CommandSuggest)
+        text = event.text_area.text
+        if not text.startswith("/") or text.strip() in {spec.name for spec in COMMANDS}:
+            suggest.display = False
             return
-        if isinstance(self.screen, CommandPaletteScreen):
-            return
-        await self._open_command_palette()
+        suggest.update_query(text)
 
-    async def _open_command_palette(self) -> None:
+    def _insert_suggestion(self, *, force: bool = False) -> bool:
+        suggest = self.query_one(CommandSuggest)
+        if not suggest.display:
+            return False
         composer = self.query_one("#composer", TextArea)
-
-        async def selected(command: str | None) -> None:
-            if command is None:
-                composer.focus()
-                return
-            composer.load_text(f"{command} ")
-            composer.focus()
-            composer.cursor_location = (0, len(composer.text))
-
-        await self.push_screen(CommandPaletteScreen(), callback=selected)
+        if not force and composer.text.strip() in {spec.name for spec in COMMANDS}:
+            return False
+        command = suggest.selected_command()
+        if command is None:
+            return False
+        suggest.display = False
+        composer.load_text(f"{command} ")
+        composer.focus()
+        composer.cursor_location = (0, len(composer.text))
+        return True
 
     async def on_key(self, event: events.Key) -> None:
+        suggest = self.query_one(CommandSuggest)
+        if event.key in {"up", "down"} and suggest.display:
+            event.prevent_default()
+            event.stop()
+            if event.key == "up":
+                suggest.action_cursor_up()
+            else:
+                suggest.action_cursor_down()
+            return
+        if event.key == "tab" and self._insert_suggestion(force=True):
+            event.prevent_default()
+            event.stop()
+            return
         if event.key == "escape":
+            if suggest.display:
+                suggest.display = False
+                event.prevent_default()
+                event.stop()
+                return
             event.prevent_default()
             event.stop()
             presses = self.keyboard.record_escape()
@@ -369,9 +381,14 @@ class ForgeApp(App[None]):
         composer.cursor_location = (value.count("\n"), len(value.rsplit("\n", maxsplit=1)[-1]))
 
     async def action_submit_composer(self) -> None:
+        if self._insert_suggestion():
+            return
         focused = self.screen.focused
         if isinstance(focused, Button):
             focused.press()
+            return
+        if isinstance(focused, Input):
+            await focused.action_submit()
             return
         if isinstance(focused, OptionList):
             focused.action_select()
@@ -482,13 +499,6 @@ class ForgeApp(App[None]):
         await self._append_entry("SYSTEM", output, "notice")
         self._refresh_sidebar()
 
-    async def _prepare_subagent(self, agent_name: str) -> None:
-        await self._show_command_result(self.commands.subagent_text(agent_name))
-        composer = self.query_one("#composer", TextArea)
-        composer.load_text(f"/agent {agent_name} ")
-        composer.focus()
-        composer.cursor_location = (0, len(composer.text))
-
     async def _start_subagent(self, request: str) -> None:
         parts = request.split(maxsplit=1)
         if len(parts) != 2 or not parts[1].strip():
@@ -510,6 +520,7 @@ class ForgeApp(App[None]):
             "notice",
         )
         self._active_subagent = agent_name
+        self.subagent_session.begin(agent_name)
         self._set_busy(True, label=f"{agent_name} working")
         self.run_subagent(agent_name, objective)
 
@@ -537,8 +548,10 @@ class ForgeApp(App[None]):
             report = runtime.subagents.run(agent_name=agent_name, objective=objective)
         except SubagentInterruptedError:
             self.call_from_thread(self._append_entry, "SYSTEM", "Interrupted.", "notice")
+            self.call_from_thread(self.subagent_session.cancel, agent_name)
         except SubagentError as error:
             self.call_from_thread(self._append_entry, "SUBAGENT ERROR", str(error), "error")
+            self.call_from_thread(self.subagent_session.fail, agent_name, str(error))
         else:
             self.call_from_thread(
                 self._append_entry,
@@ -546,6 +559,7 @@ class ForgeApp(App[None]):
                 report,
                 "forge",
             )
+            self.call_from_thread(self.subagent_session.complete, agent_name, report)
         finally:
             self.call_from_thread(self._complete_subagent)
 
@@ -684,7 +698,7 @@ class ForgeApp(App[None]):
             self.session_name,
             self._eft_text,
             len(self._queued_messages),
-            agents_ready=len(SUBAGENTS),
+            agents_ready=self.subagent_session.ready_count(),
             active_subagent=self._active_subagent or "",
         )
         self.query_one("#header", HeaderBar).update_status(

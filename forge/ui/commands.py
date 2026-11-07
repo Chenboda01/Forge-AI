@@ -71,7 +71,7 @@ class CommandService:
             "/force-stop  /updates  /compact\n"
             "/asn TASK  /fast [low|mid|high|xhigh|max]  /theme  /clear  /exit\n"
             "Keys\n"
-            "ctrl+x a  open the subagent browser  ctrl+q quit"
+            "ctrl+x  open the subagent browser  ctrl+q quit"
         )
 
     @staticmethod
@@ -181,6 +181,7 @@ class CommandService:
                 output_tokens=runtime.agent.output_tokens,
             )
         runtime.agent.reset()
+        runtime.subagents.reset()
         return "Started a new conversation."
 
     def save_session(self, name: str = "") -> str:
@@ -311,6 +312,7 @@ async def handle_command(app: ForgeApp, command: str) -> None:
     if name == "/new":
         output = app.commands.new_session()
         app.session_name = ""
+        app.subagent_session.reset()
         await app.query_one("#conversation", ConversationView).reset()
         await app._show_command_result(output)
         return

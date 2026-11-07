@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from textual import events, on
-from textual.app import ComposeResult
-from textual.binding import Binding
-from textual.containers import Vertical
-from textual.screen import ModalScreen
-from textual.widgets import Input, OptionList, Static
+from rich.text import Text
+from textual.widgets import OptionList
 from textual.widgets.option_list import Option
+
+COMMAND_COLORS: tuple[str, ...] = (
+    "dark_orange",
+    "hot_pink",
+    "spring_green3",
+    "green_yellow",
+    "magenta",
+    "red1",
+    "grey62",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,59 +57,46 @@ COMMANDS: tuple[CommandSpec, ...] = (
 )
 
 
-class CommandPaletteScreen(ModalScreen[str]):
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel", show=False, priority=True),
-    ]
+class CommandSuggest(OptionList):
+    """Inline command suggestions shown directly above the composer."""
 
-    def compose(self) -> ComposeResult:
-        with Vertical(id="palette-dialog"):
-            yield Static("Commands", id="palette-title")
-            yield Static("type to filter · ↑↓ enter · esc to cancel", id="palette-subtitle")
-            yield Input(placeholder="Filter commands", id="palette-filter")
-            yield OptionList(id="palette-options")
+    DEFAULT_CSS = """
+    CommandSuggest {
+        display: none;
+        width: 100%;
+        height: auto;
+        max-height: 8;
+        padding: 0 1;
+        border: round $accent-primary;
+        background: $surface-elevated;
+    }
+    """
 
-    def on_mount(self) -> None:
-        self._populate("")
-        self.query_one("#palette-filter", Input).focus()
+    def update_query(self, query: str) -> bool:
+        raw = query.lstrip("/").lower()
+        needle = raw.strip()
+        self.clear_options()
+        if any(character.isspace() for character in raw):
+            self.display = False
+            return False
+        matches = [
+            spec
+            for spec in COMMANDS
+            if not needle or spec.name.lstrip("/").lower().startswith(needle)
+        ]
+        for spec in matches:
+            color = COMMAND_COLORS[COMMANDS.index(spec) % len(COMMAND_COLORS)]
+            prompt = Text(spec.name, style=f"bold {color}")
+            prompt.append("  ")
+            prompt.append(spec.description, style="dim")
+            self.add_option(Option(prompt, id=spec.name))
+        self.display = bool(matches)
+        if matches:
+            self.highlighted = 0
+        return bool(matches)
 
-    @on(Input.Changed, "#palette-filter")
-    def filter_commands(self, event: Input.Changed) -> None:
-        self._populate(event.value)
-
-    @on(OptionList.OptionSelected, "#palette-options")
-    def select_command(self, event: OptionList.OptionSelected) -> None:
-        if event.option_id is not None:
-            self.dismiss(event.option_id)
-
-    async def on_key(self, event: events.Key) -> None:
-        options = self.query_one("#palette-options", OptionList)
-        filter_input = self.query_one("#palette-filter", Input)
-        if event.key == "down" and filter_input.has_focus and options.option_count:
-            event.prevent_default()
-            event.stop()
-            options.focus()
-            options.action_first()
-            return
-        if (
-            event.key == "up"
-            and options.has_focus
-            and options.option_count
-            and options.highlighted_option is options.get_option_at_index(0)
-        ):
-            event.prevent_default()
-            event.stop()
-            filter_input.focus()
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-    def _populate(self, query: str) -> None:
-        options = self.query_one("#palette-options", OptionList)
-        options.clear_options()
-        needle = query.strip().lower()
-        for spec in COMMANDS:
-            haystack = f"{spec.name} {spec.description}".lower()
-            if needle and needle not in haystack:
-                continue
-            options.add_option(Option(f"{spec.name:<20} {spec.description}", id=spec.name))
+    def selected_command(self) -> str | None:
+        if self.highlighted is None:
+            return None
+        option = self.get_option_at_index(self.highlighted)
+        return option.id

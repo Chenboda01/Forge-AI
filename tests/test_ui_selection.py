@@ -4,7 +4,7 @@ from textual.widgets import Input, OptionList, Static, TextArea
 from forge.forge import build_runtime
 from forge.forge_core.models import MODELS
 from forge.ui.app import ForgeApp
-from forge.ui.command_palette import COMMANDS, CommandPaletteScreen
+from forge.ui.command_palette import COMMANDS, CommandSuggest
 from forge.ui.fast_select import FastSelectScreen
 from forge.ui.model_select import ModelSelectScreen
 from forge.ui.subagent_select import SubagentSelectScreen
@@ -14,27 +14,28 @@ from forge.ui.widgets import ConversationView
 
 
 @pytest.mark.asyncio
-async def test_typing_slash_opens_the_command_palette() -> None:
+async def test_typing_slash_shows_inline_command_suggestions() -> None:
     # Given: a mounted Forge composer with focus
     app = ForgeApp(skip_startup=True)
 
     async with app.run_test(size=(120, 40)) as pilot:
         composer = app.query_one("#composer", TextArea)
 
-        # When: the user types the palette trigger
+        # When: the user types the inline suggestion trigger
         await pilot.press("slash")
         await pilot.pause()
 
-        # Then: every command is listed without executing anything
-        assert isinstance(app.screen, CommandPaletteScreen)
-        options = app.screen.query_one("#palette-options", OptionList)
-        assert options.option_count == len(COMMANDS)
+        # Then: every command is listed inline without opening a modal
+        suggest = app.query_one(CommandSuggest)
+        assert suggest.display
+        assert suggest.option_count == len(COMMANDS)
         assert composer.text == "/"
+        assert len(app.screen_stack) == 1
 
 
 @pytest.mark.asyncio
-async def test_palette_filters_and_inserts_a_command() -> None:
-    # Given: an open command palette
+async def test_inline_suggestions_filter_and_insert_a_command() -> None:
+    # Given: an inline command list above the composer
     app = ForgeApp(skip_startup=True)
 
     async with app.run_test(size=(120, 40)) as pilot:
@@ -42,19 +43,42 @@ async def test_palette_filters_and_inserts_a_command() -> None:
         await pilot.press("slash")
         await pilot.pause()
 
-        # When: the user filters for the model picker and selects it
-        filter_input = app.screen.query_one("#palette-filter", Input)
-        filter_input.value = "choose"
+        # When: the user filters for the theme picker and accepts it
+        await pilot.press("t")
+        await pilot.press("h")
+        await pilot.press("e")
         await pilot.pause()
-        options = app.screen.query_one("#palette-options", OptionList)
-        assert options.option_count == 1
-        await pilot.press("down")
+        suggest = app.query_one(CommandSuggest)
+        assert suggest.option_count == 1
         await pilot.press("enter")
         await pilot.pause()
 
         # Then: the command is inserted for review instead of executed
-        assert not isinstance(app.screen, CommandPaletteScreen)
-        assert composer.text == "/model "
+        assert not suggest.display
+        assert composer.text == "/theme "
+        assert len(app.screen_stack) == 1
+
+
+@pytest.mark.asyncio
+async def test_escape_closes_inline_suggestions_without_clearing_input() -> None:
+    # Given: inline suggestions open above the composer
+    app = ForgeApp(skip_startup=True)
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+        await pilot.press("slash")
+        await pilot.pause()
+        suggest = app.query_one(CommandSuggest)
+        assert suggest.display
+
+        # When: the user dismisses the list
+        await pilot.press("escape")
+        await pilot.pause()
+
+        # Then: the list closes but the typed slash remains for editing
+        assert not suggest.display
+        assert composer.text == "/"
+        assert len(app.screen_stack) == 1
 
 
 @pytest.mark.asyncio
@@ -156,31 +180,29 @@ async def test_theme_picker_wraps_up_and_keeps_the_focused_theme_visible() -> No
 
 
 @pytest.mark.asyncio
-async def test_command_palette_scrolls_inside_a_short_terminal() -> None:
-    # Given: a command palette on a terminal too short for every command
+async def test_inline_command_suggestions_scroll_inside_a_short_terminal() -> None:
+    # Given: an inline command list on a terminal too short for every command
     app = ForgeApp(skip_startup=True)
     async with app.run_test(size=(100, 24)) as pilot:
         await pilot.press("slash")
         await pilot.pause()
-        dialog = app.screen.query_one("#palette-dialog")
-        options = app.screen.query_one("#palette-options", OptionList)
+        suggest = app.query_one(CommandSuggest)
 
-        # Then: the dialog and its list stay inside the terminal
-        assert dialog.region.bottom <= 24
-        assert options.region.bottom <= dialog.region.bottom
+        # Then: the list stays inside the terminal
+        assert suggest.region.bottom <= 24
 
         # When: the user walks down the list and then back up
         for _ in range(20):
             await pilot.press("down")
             await pilot.pause()
-        highlighted = options.highlighted
+        highlighted = suggest.highlighted
         assert highlighted is not None
-        assert options.scroll_y > 0
+        assert suggest.scroll_y > 0
         await pilot.press("up")
         await pilot.pause()
 
         # Then: the up arrow moves the highlighted command instead of sticking
-        assert options.highlighted == highlighted - 1
+        assert suggest.highlighted == highlighted - 1
 
 
 @pytest.mark.asyncio
