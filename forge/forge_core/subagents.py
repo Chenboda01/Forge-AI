@@ -118,6 +118,12 @@ class SubagentRunner:
             if self._accepting_cancellation:
                 self._cancel_requested.set()
 
+    def reset(self) -> None:
+        """Clear cancellation state so a new session starts clean."""
+        with self._cancel_lock:
+            self._cancel_requested.clear()
+            self._accepting_cancellation = False
+
     def _begin_operation(self) -> None:
         with self._cancel_lock:
             self._cancel_requested.clear()
