@@ -6,7 +6,8 @@ def test_new_session_starts_every_agent_fresh() -> None:
     # Given: a newly created subagent session
     session = SubagentSession()
 
-    # Then: each registered agent starts idle with no runs or reports
+    # Then: it is labeled generation one with each agent idle
+    assert session.generation == 1
     for name in SUBAGENTS:
         state = session.state(name)
         assert state.status == "idle"
@@ -34,6 +35,7 @@ def test_session_tracks_runs_and_resets_after_new() -> None:
     # When: starting a new session clears the state
     session.reset()
 
-    # Then: every agent is fresh again
+    # Then: every agent is fresh again under a new generation
+    assert session.generation == 2
     assert session.ready_count() == len(SUBAGENTS)
     assert all(session.state(name).runs == 0 for name in SUBAGENTS)

@@ -17,6 +17,7 @@ class SubagentSelectScreen(ModalScreen[tuple[str, str] | None]):
         Binding("escape", "cancel", "Cancel", show=False, priority=True),
         Binding("left", "previous_agent", "Previous", show=False),
         Binding("right", "next_agent", "Next", show=False),
+        Binding("t", "toggle_talk", "Talk", show=False),
     ]
 
     def __init__(self, session: SubagentSession | None = None) -> None:
@@ -26,16 +27,26 @@ class SubagentSelectScreen(ModalScreen[tuple[str, str] | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="agents-dialog"):
-            yield Static("Subagents", id="agents-title")
             yield Static(
-                "←→ switch · ↑↓ inspect · enter act · esc close",
+                f"Subagents · session {self.session.generation}",
+                id="agents-title",
+            )
+            yield Static(
+                "←→ switch · ↑↓ inspect · t talk · enter message · esc close",
                 id="agents-subtitle",
             )
             with Horizontal(id="agents-body"):
                 yield OptionList(id="agents-options")
                 yield Static(id="agents-detail")
-            yield Checkbox("Talk", id="agents-talk")
-            yield Input(placeholder="Message the selected subagent", id="agents-prompt")
+            with Horizontal(id="agents-talk-row"):
+                yield Checkbox("Talk to this agent", id="agents-talk")
+                yield Static("off · space or t toggles", id="agents-talk-hint")
+            with Vertical(id="agents-prompt-box"):
+                yield Static("MESSAGE", id="agents-prompt-label")
+                yield Input(
+                    placeholder="Type a message, then press Enter",
+                    id="agents-prompt",
+                )
 
     def on_mount(self) -> None:
         options = self.query_one("#agents-options", OptionList)
@@ -48,7 +59,7 @@ class SubagentSelectScreen(ModalScreen[tuple[str, str] | None]):
         options.action_first()
         if self._current:
             self._show_detail(self._current)
-        self.query_one("#agents-prompt", Input).display = False
+        self.query_one("#agents-prompt-box", Vertical).display = False
 
     @on(OptionList.OptionHighlighted, "#agents-options")
     def show_highlighted(self, event: OptionList.OptionHighlighted) -> None:
@@ -64,12 +75,17 @@ class SubagentSelectScreen(ModalScreen[tuple[str, str] | None]):
     @on(Checkbox.Changed, "#agents-talk")
     def toggle_talk(self, event: Checkbox.Changed) -> None:
         prompt = self.query_one("#agents-prompt", Input)
-        prompt.display = event.value
+        box = self.query_one("#agents-prompt-box", Vertical)
+        hint = self.query_one("#agents-talk-hint", Static)
         if event.value:
+            box.display = True
+            hint.update("on · type below, Enter sends")
             prompt.focus()
-        else:
-            prompt.value = ""
-            self.query_one("#agents-options", OptionList).focus()
+            return
+        prompt.value = ""
+        hint.update("off · space or t toggles")
+        self.query_one("#agents-options", OptionList).focus()
+        box.display = False
 
     @on(Input.Submitted, "#agents-prompt")
     def submit_prompt(self, event: Input.Submitted) -> None:
@@ -87,15 +103,21 @@ class SubagentSelectScreen(ModalScreen[tuple[str, str] | None]):
         options.focus()
         options.action_cursor_down()
 
+    def action_toggle_talk(self) -> None:
+        if isinstance(self.focused, Input):
+            return
+        talk = self.query_one("#agents-talk", Checkbox)
+        talk.value = not talk.value
+
     def action_cancel(self) -> None:
         self.dismiss(None)
 
     def _activate(self, name: str) -> None:
         talk = self.query_one("#agents-talk", Checkbox)
-        prompt = self.query_one("#agents-prompt", Input)
         if not talk.value:
-            self.dismiss(None)
+            talk.value = True
             return
+        prompt = self.query_one("#agents-prompt", Input)
         text = prompt.value.strip()
         if not text:
             prompt.focus()
@@ -134,3 +156,4 @@ class SubagentSelectScreen(ModalScreen[tuple[str, str] | None]):
             )
         )
         self.query_one("#agents-detail", Static).update(detail)
+        self.query_one("#agents-prompt-label", Static).update(f"MESSAGE {spec.name.upper()}")

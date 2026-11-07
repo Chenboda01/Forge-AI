@@ -16,10 +16,12 @@ class SubagentSession:
     """Per-session state for the registered read-only subagents."""
 
     def __init__(self) -> None:
+        self.generation = 0
         self._states: dict[str, SubagentState] = {}
         self.reset()
 
     def reset(self) -> None:
+        self.generation += 1
         self._states = {name: SubagentState() for name in SUBAGENTS}
 
     def state(self, name: str) -> SubagentState:

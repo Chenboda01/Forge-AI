@@ -445,11 +445,22 @@ async def test_agents_command_opens_browser_with_details(tmp_path) -> None:
         assert "read_file" in detail
         assert "Step limit" in detail
 
-        # When: the user selects the highlighted role with talk off
+        # When: the user presses Enter on the highlighted role with talk off
         await pilot.press("enter")
         await pilot.pause()
 
-        # Then: the browser closes without preloading a delegation
+        # Then: the visible message box opens instead of closing the browser
+        assert isinstance(app.screen, SubagentSelectScreen)
+        assert app.screen.query_one("#agents-talk", Checkbox).value
+        assert app.screen.query_one("#agents-prompt-box").display
+        assert app.screen.focused is app.screen.query_one("#agents-prompt", Input)
+        assert composer.text == ""
+
+        # When: Escape closes the browser
+        await pilot.press("escape")
+        await pilot.pause()
+
+        # Then: the composer stays empty
         assert not isinstance(app.screen, SubagentSelectScreen)
         assert composer.text == ""
 
@@ -518,16 +529,19 @@ async def test_agents_talk_toggle_reveals_the_prompt(tmp_path) -> None:
         await pilot.pause()
         talk = app.screen.query_one("#agents-talk", Checkbox)
         prompt = app.screen.query_one("#agents-prompt", Input)
+        box = app.screen.query_one("#agents-prompt-box")
         assert not talk.value
-        assert not prompt.display
+        assert not box.display
 
         # When: the user enables talk
         talk.value = True
         await pilot.pause()
 
-        # Then: the prompt appears focused for the selected agent
-        assert prompt.display
+        # Then: the labeled message box appears focused for the selected agent
+        assert box.display
         assert app.screen.focused is prompt
+        label = str(app.screen.query_one("#agents-prompt-label", Static).content)
+        assert "MESSAGE EXPLORE" in label
 
         # When: the user sends the prompt without a connected runtime
         prompt.value = "review the diff"
@@ -537,6 +551,40 @@ async def test_agents_talk_toggle_reveals_the_prompt(tmp_path) -> None:
         # Then: the browser closes without preloading the composer
         assert not isinstance(app.screen, SubagentSelectScreen)
         assert composer.text == ""
+
+
+@pytest.mark.asyncio
+async def test_new_session_clears_subagent_runs_and_reports(monkeypatch, tmp_path) -> None:
+    # Given: a session with a completed subagent run
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    app = ForgeApp(runtime, skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        app.subagent_session.begin("explore")
+        app.subagent_session.complete("explore", "old report")
+        composer = app.query_one("#composer", TextArea)
+
+        # When: the user starts a new session
+        composer.text = "/new"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the subagent session is fresh
+        assert app.subagent_session.generation == 2
+        assert app.subagent_session.state("explore").runs == 0
+        assert app.subagent_session.state("explore").last_report == ""
+
+        # When: the browser is reopened
+        composer.text = "/agents"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: it labels the new session and shows no previous report
+        assert "session 2" in str(app.screen.query_one("#agents-title", Static).content)
+        detail = str(app.screen.query_one("#agents-detail", Static).content)
+        assert "0 run(s) this session" in detail
+        assert "old report" not in detail
 
 
 @pytest.mark.asyncio

@@ -136,6 +136,8 @@ class ForgeApp(App[None]):
             runtime.agent.presenter = self
 
     async def action_open_agents(self) -> None:
+        if len(self.screen_stack) != 1:
+            return
         await self.open_subagent_browser()
 
     async def open_subagent_browser(self) -> None:

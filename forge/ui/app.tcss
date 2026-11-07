@@ -417,15 +417,57 @@ SubagentSelectScreen {
     overflow-y: auto;
 }
 
-#agents-talk {
-    height: 1;
+#agents-talk-row {
+    height: 3;
     margin-top: 1;
-    color: $text-secondary;
+    align-vertical: middle;
+}
+
+#agents-talk {
+    width: auto;
+    height: 1;
+    padding: 0 1;
+    color: $accent-active;
+    text-style: bold;
+}
+
+#agents-talk:focus {
+    background: $accent-primary 30%;
+}
+
+#agents-talk-hint {
+    width: 1fr;
+    height: 1;
+    color: $text-muted;
+    content-align: left middle;
+}
+
+#agents-prompt-box {
+    display: none;
+    height: auto;
+    margin-top: 1;
+    padding: 1;
+    border: round $accent-active;
+    background: $surface-main;
+}
+
+#agents-prompt-label {
+    height: 1;
+    color: $accent-active;
+    text-style: bold;
 }
 
 #agents-prompt {
-    display: none;
+    height: 3;
     margin-top: 1;
+    border: tall $accent-primary;
+    background: $surface-elevated;
+    color: $text-primary;
+}
+
+#agents-prompt:focus {
+    border: tall $accent-active;
+    background: $surface-elevated;
 }
 
 ForceStopScreen {

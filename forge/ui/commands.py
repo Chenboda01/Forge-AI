@@ -182,7 +182,7 @@ class CommandService:
             )
         runtime.agent.reset()
         runtime.subagents.reset()
-        return "Started a new conversation."
+        return "Started a new conversation. Subagent runs cleared."
 
     def save_session(self, name: str = "") -> str:
         runtime = self.runtime
