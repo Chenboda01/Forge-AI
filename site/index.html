@@ -131,7 +131,7 @@
         <article class="latest-card">
           <p class="latest-kicker">Agents</p>
           <h3>Inspect before you delegate</h3>
-          <p><code>/agents</code> opens a browser with each read-only role's description, tools, step limit, and delegation command. Pick a role to preload the composer.</p>
+          <p><code>/agents</code> opens a browser with each read-only role's description, tools, step limit, status, and run count. Left and right move between roles; Talk is off by default and can be enabled to prompt the selected agent without preloading the composer.</p>
         </article>
 
         <article class="latest-card">
@@ -313,7 +313,7 @@
         </div>
         <div class="cap-card">
           <h3>Terminal UX</h3>
-          <p>A responsive Textual interface with a command palette, type-ahead queueing, ten themes saved per user, a subagent browser, <code>/fast</code> speed profiles, <code>/asn</code> step estimation, and live progress and EFT.</p>
+          <p>A responsive Textual interface with inline color-coded command suggestions, type-ahead queueing, ten themes saved per user, a subagent browser, <code>/fast</code> speed profiles, <code>/asn</code> step estimation, and live progress and EFT.</p>
           <span class="cap-evidence">tests/test_tui.py · tests/test_themes.py · tests/test_preferences.py</span>
         </div>
       </div>
@@ -323,7 +323,7 @@
     <section aria-labelledby="commands-title">
       <p class="eyebrow">Reference</p>
       <h2 id="commands-title">Terminal commands</h2>
-      <p>Type <code>/</code> to open the filterable command palette, or enter a command directly. While Forge is working, the composer stays editable: Enter queues your next message, and read-only commands run immediately.</p>
+      <p>Type <code>/</code> to open the inline color-coded command list above the composer; filter as you type, then press Enter or Tab to insert. While Forge is working, the composer stays editable: Enter queues your next message, and read-only commands run immediately.</p>
       <dl class="command-list">
         <div class="command-row"><dt><code>/help</code></dt><dd>Show the command list</dd></div>
         <div class="command-row"><dt><code>/status</code></dt><dd>Provider, model, mode, workspace</dd></div>
@@ -339,7 +339,7 @@
         <div class="command-row"><dt><code>/resume</code></dt><dd>Resume a saved session</dd></div>
         <div class="command-row"><dt><code>/history</code></dt><dd>Show conversation history</dd></div>
         <div class="command-row"><dt><code>/agents [NAME]</code></dt><dd>Browse subagents or inspect one role's tools and limits</dd></div>
-        <div class="command-row"><dt><code>Ctrl+X, A</code></dt><dd>Open the subagent browser from the composer</dd></div>
+        <div class="command-row"><dt><code>Ctrl+X</code></dt><dd>Open the subagent browser immediately; left/right switch agents</dd></div>
         <div class="command-row"><dt><code>/agent</code></dt><dd>Delegate an objective to a subagent</dd></div>
         <div class="command-row"><dt><code>/checkpoints</code></dt><dd>List every patch checkpoint and its ID</dd></div>
         <div class="command-row"><dt><code>/checkpoint</code></dt><dd>Alias for /checkpoints</dd></div>
