@@ -701,6 +701,7 @@ class ForgeApp(App[None]):
             self._eft_text,
             len(self._queued_messages),
             agents_ready=self.subagent_session.ready_count(),
+            agents_used=self.subagent_session.started > 0,
             active_subagent=self._active_subagent or "",
         )
         self.query_one("#header", HeaderBar).update_status(

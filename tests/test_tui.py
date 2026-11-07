@@ -418,7 +418,7 @@ async def test_connected_runtime_renders_status_chrome(monkeypatch, tmp_path) ->
         assert "\u25c6 FORGE " in left
         assert "enter send" in footer
         sidebar = str(app.query_one("#sidebar-content", Static).content)
-        assert "Agents\n2 ready" in sidebar
+        assert "Agents\nStill waiting..." in sidebar
 
 
 @pytest.mark.asyncio
@@ -563,6 +563,10 @@ async def test_new_session_clears_subagent_runs_and_reports(monkeypatch, tmp_pat
     async with app.run_test(size=(100, 32)) as pilot:
         app.subagent_session.begin("explore")
         app.subagent_session.complete("explore", "old report")
+        app._refresh_sidebar()
+        await pilot.pause()
+        sidebar = str(app.query_one("#sidebar-content", Static).content)
+        assert "Agents\n2 ready" in sidebar
         composer = app.query_one("#composer", TextArea)
 
         # When: the user starts a new session
@@ -572,8 +576,11 @@ async def test_new_session_clears_subagent_runs_and_reports(monkeypatch, tmp_pat
 
         # Then: the subagent session is fresh
         assert app.subagent_session.generation == 2
+        assert app.subagent_session.started == 0
         assert app.subagent_session.state("explore").runs == 0
         assert app.subagent_session.state("explore").last_report == ""
+        sidebar = str(app.query_one("#sidebar-content", Static).content)
+        assert "Agents\nStill waiting..." in sidebar
 
         # When: the browser is reopened
         composer.text = "/agents"

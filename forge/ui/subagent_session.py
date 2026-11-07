@@ -17,17 +17,20 @@ class SubagentSession:
 
     def __init__(self) -> None:
         self.generation = 0
+        self.started = 0
         self._states: dict[str, SubagentState] = {}
         self.reset()
 
     def reset(self) -> None:
         self.generation += 1
+        self.started = 0
         self._states = {name: SubagentState() for name in SUBAGENTS}
 
     def state(self, name: str) -> SubagentState:
         return self._states[name]
 
     def begin(self, name: str) -> None:
+        self.started += 1
         self._states[name].status = "working"
 
     def complete(self, name: str, report: str) -> None:

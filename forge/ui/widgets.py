@@ -213,6 +213,7 @@ class StatusRail(Vertical):
         eft_text: str = "",
         queued: int = 0,
         agents_ready: int = 0,
+        agents_used: bool = False,
         active_subagent: str = "",
     ) -> None:
         if runtime is None:
@@ -233,7 +234,12 @@ class StatusRail(Vertical):
         filled = min(int(context / 10), 10)
         bar = "#" * filled + "-" * (10 - filled)
         cost_text = "Unavailable" if cost is None else f"${cost:.4f}"
-        agent_text = f"{active_subagent} active" if active_subagent else f"{agents_ready} ready"
+        if active_subagent:
+            agent_text = f"{active_subagent} active"
+        elif agents_used:
+            agent_text = f"{agents_ready} ready"
+        else:
+            agent_text = "Still waiting..."
         sections: Iterable[str] = (
             "FORGE",
             "",

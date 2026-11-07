@@ -8,6 +8,7 @@ def test_new_session_starts_every_agent_fresh() -> None:
 
     # Then: it is labeled generation one with each agent idle
     assert session.generation == 1
+    assert session.started == 0
     for name in SUBAGENTS:
         state = session.state(name)
         assert state.status == "idle"
@@ -20,6 +21,7 @@ def test_session_tracks_runs_and_resets_after_new() -> None:
     # Given: a session with completed, failed, and cancelled runs
     session = SubagentSession()
     session.begin("explore")
+    assert session.started == 1
     assert session.ready_count() == len(SUBAGENTS) - 1
     session.complete("explore", "report")
     session.fail("reviewer", "boom")
@@ -37,5 +39,6 @@ def test_session_tracks_runs_and_resets_after_new() -> None:
 
     # Then: every agent is fresh again under a new generation
     assert session.generation == 2
+    assert session.started == 0
     assert session.ready_count() == len(SUBAGENTS)
     assert all(session.state(name).runs == 0 for name in SUBAGENTS)
