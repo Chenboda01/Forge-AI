@@ -595,6 +595,69 @@ async def test_new_session_clears_subagent_runs_and_reports(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_copying_a_highlight_reports_success(monkeypatch, tmp_path) -> None:
+    # Given: a mounted Forge app with a working system clipboard
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+    monkeypatch.setattr("forge.ui.app.copy_system_clipboard", lambda text: True)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        notifications: list[str] = []
+        monkeypatch.setattr(app, "notify", lambda message, **kwargs: notifications.append(message))
+
+        # When: a settled highlight is copied
+        app._selection_text = "selected text"
+        app._copy_selection("selected text")
+        await pilot.pause()
+
+        # Then: the message ends with a green check mark
+        assert notifications == ["Copied to clipboard successful [green]✓[/green]"]
+
+
+@pytest.mark.asyncio
+async def test_copying_a_highlight_reports_failure(monkeypatch, tmp_path) -> None:
+    # Given: a mounted Forge app whose system clipboard rejects text
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+    monkeypatch.setattr("forge.ui.app.copy_system_clipboard", lambda text: False)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        notifications: list[str] = []
+        monkeypatch.setattr(app, "notify", lambda message, **kwargs: notifications.append(message))
+
+        # When: a settled highlight is copied
+        app._selection_text = "selected text"
+        app._copy_selection("selected text")
+        await pilot.pause()
+
+        # Then: the message ends with a red error mark
+        assert notifications == ["Copied to clipboard unsuccessful [red]✗[/red]"]
+
+
+@pytest.mark.asyncio
+async def test_highlighted_text_is_copied_automatically(monkeypatch, tmp_path) -> None:
+    # Given: a mounted Forge app with a visible text highlight
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+    copied: list[str] = []
+    monkeypatch.setattr(
+        "forge.ui.app.copy_system_clipboard",
+        lambda text: copied.append(text) or True,
+    )
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        notifications: list[str] = []
+        monkeypatch.setattr(app, "notify", lambda message, **kwargs: notifications.append(message))
+        monkeypatch.setattr(app.screen, "get_selected_text", lambda: "highlighted text")
+
+        # When: the highlight settles
+        app._poll_selection()
+        await asyncio.sleep(0.5)
+        await pilot.pause()
+
+        # Then: the highlighted text reaches the clipboard once with success feedback
+        assert copied == ["highlighted text"]
+        assert notifications == ["Copied to clipboard successful [green]✓[/green]"]
+
+
+@pytest.mark.asyncio
 async def test_agents_command_shows_named_role_details(tmp_path) -> None:
     # Given: a mounted Forge composer
     app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")

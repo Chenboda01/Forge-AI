@@ -9,6 +9,7 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.timer import Timer
 from textual.widgets import Button, Input, OptionList, TextArea
 
 from forge.forge_core.agent import AgentError, AgentInterruptedError
@@ -21,6 +22,7 @@ from forge.forge_core.preferences import (
 )
 from forge.forge_core.subagents import SUBAGENTS, SubagentError, SubagentInterruptedError
 from forge.ui.approval import ApprovalScreen
+from forge.ui.clipboard import copy_to_clipboard as copy_system_clipboard
 from forge.ui.command_palette import COMMANDS, CommandSuggest
 from forge.ui.commands import CommandService, handle_command
 from forge.ui.force_stop import (
@@ -131,6 +133,8 @@ class ForgeApp(App[None]):
         self._eft_timer = None
         self._last_step_time: float | None = None
         self._ema_step_duration: float = 0.0
+        self._selection_text = ""
+        self._selection_timer: Timer | None = None
         self.subagent_session = SubagentSession()
         if runtime is not None:
             runtime.agent.presenter = self
@@ -246,6 +250,7 @@ class ForgeApp(App[None]):
 
     async def on_mount(self) -> None:
         self._eft_timer = self.set_interval(1.0, self._refresh_eft, pause=True)
+        self.set_interval(0.2, self._poll_selection)
         self._refresh_sidebar()
         self.query_one("#composer", TextArea).focus()
         if self._skip_startup:
@@ -264,6 +269,29 @@ class ForgeApp(App[None]):
     @property
     def preferences_path(self) -> Path:
         return self._preferences_path
+
+    def _poll_selection(self) -> None:
+        text = self.screen.get_selected_text() or ""
+        if text == self._selection_text:
+            return
+        self._selection_text = text
+        if self._selection_timer is not None:
+            self._selection_timer.stop()
+            self._selection_timer = None
+        if text:
+            self._selection_timer = self.set_timer(0.25, lambda: self._copy_selection(text))
+
+    def _copy_selection(self, text: str) -> None:
+        if text != self._selection_text:
+            return
+        if copy_system_clipboard(text):
+            self.notify("Copied to clipboard successful [green]✓[/green]", timeout=2)
+        else:
+            self.notify(
+                "Copied to clipboard unsuccessful [red]✗[/red]",
+                severity="error",
+                timeout=3,
+            )
 
     @property
     def active_theme(self) -> str:
