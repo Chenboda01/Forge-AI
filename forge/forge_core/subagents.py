@@ -9,6 +9,11 @@ from .instructions import ProjectInstructions, TaskMetadata
 from .presenter import AgentLifecycle, NullLifecycle
 from .provider import CompletionRequest, ForgeProviderError, ProviderClient
 from .redaction import redact_text
+from .reviewer_report import (
+    ReviewerReportError,
+    parse_reviewer_report,
+    render_reviewer_report,
+)
 from .tools import ToolError, ToolRegistry
 
 
@@ -60,16 +65,26 @@ Return a concise report to the parent agent.
         system_prompt="""
 You are Forge Reviewer.
 
-Review the repository or current Git diff without editing anything.
+Review the repository or the current Git diff without editing anything.
+You are read-only: never modify files, never run commands, never delegate,
+and never speak directly to the end user.
 
-Return:
-1. Critical issues
-2. Warnings
-3. Suggestions
-4. Missing tests
-5. Verdict: approve or request_changes
+Return exactly one JSON object and nothing else:
+{
+  "critical_issues": ["<file>: <problem>"],
+  "warnings": ["<file>: <problem>"],
+  "suggestions": ["<file>: <improvement>"],
+  "missing_tests": ["<untested case>"],
+  "verdict": "approve"
+}
 
-Every finding should mention the relevant file when possible.
+Rules:
+- All five fields are required.
+- Each findings field is an array of non-empty strings; use [] when empty.
+- Mention the relevant file when possible.
+- Set "verdict" to "request_changes" when any critical issue or missing test
+  makes the change unsafe to merge; otherwise set it to "approve".
+- Do not wrap the JSON in prose or Markdown fences.
 """.strip(),
         allowed_tools=(
             "read_file",
@@ -181,6 +196,7 @@ class SubagentRunner:
                 objective=objective,
                 context_files=context_files or [],
                 constraints=constraints or [],
+                json_report=spec.name == "reviewer",
             )
         )
         messages: list[dict[str, Any]] = [
@@ -210,7 +226,7 @@ class SubagentRunner:
                 content = response.content
                 if not content:
                     raise SubagentError(f"{agent_name} returned no report.")
-                return self._commit_report(content)
+                return self._commit_report(spec.name, content)
 
             self._append_provider_message(messages, response.assistant_message)
             for tool_call in tool_calls:
@@ -246,20 +262,34 @@ class SubagentRunner:
             self._raise_if_interrupted_locked()
             messages.append(message)
 
-    def _commit_report(self, content: str) -> str:
+    def _commit_report(self, agent_name: str, content: str) -> str:
         with self._cancel_lock:
             self._raise_if_interrupted_locked()
             self._accepting_cancellation = False
-        return redact_text(content)
+        report = redact_text(content)
+        if agent_name != "reviewer":
+            return report
+        try:
+            validated = parse_reviewer_report(report)
+        except ReviewerReportError as error:
+            raise SubagentError(f"{agent_name} returned an invalid report: {error}") from None
+        return render_reviewer_report(validated)
 
     @staticmethod
     def _build_prompt(
         objective: str,
         context_files: list[str],
         constraints: list[str],
+        *,
+        json_report: bool = False,
     ) -> str:
         files_text = "\n".join(f"- {path}" for path in context_files)
         constraints_text = "\n".join(f"- {constraint}" for constraint in constraints)
+        report_instruction = (
+            "Return only the JSON object required by your system prompt."
+            if json_report
+            else "Return a concise evidence-based report to the parent Forge agent."
+        )
         return f"""
 Delegated objective:
 {objective}
@@ -270,6 +300,6 @@ Suggested files:
 Constraints:
 {constraints_text or "- Stay narrowly focused on the objective."}
 
-Return a concise evidence-based report to the parent Forge agent.
+{report_instruction}
 Do not speak as though you are responding directly to the end user.
 """.strip()

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from forge.forge import build_runtime
@@ -175,3 +177,76 @@ def test_subagent_redacts_objective_credentials_before_provider_request(
     # Then: the isolated provider context contains only redacted text
     assert secret not in str(requests[0].messages)
     assert "[REDACTED]" in str(requests[0].messages)
+
+
+def _reviewer_payload(**overrides: object) -> str:
+    payload: dict[str, object] = {
+        "critical_issues": [],
+        "warnings": [],
+        "suggestions": [],
+        "missing_tests": [],
+        "verdict": "approve",
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
+
+
+def test_reviewer_reports_are_validated_and_rendered(monkeypatch, tmp_path) -> None:
+    # Given: a provider that returns a structured reviewer report
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runner = build_runtime(tmp_path).subagents
+    payload = _reviewer_payload(
+        critical_issues=["forge/a.py: missing workspace check"],
+        suggestions=["forge/a.py: extract the check"],
+        missing_tests=["reject a path outside the workspace"],
+        verdict="request_changes",
+    )
+    monkeypatch.setattr(
+        runner.provider,
+        "complete",
+        lambda _request: CompletionResponse(payload, (), TokenUsage(0, 0), "stop"),
+    )
+
+    # When: the reviewer completes its delegated review
+    report = runner.run("reviewer", "review the current diff")
+
+    # Then: the parent receives the validated canonical report, not raw JSON
+    assert report.startswith("Critical issues\n- forge/a.py: missing workspace check")
+    assert "Verdict\n- request_changes" in report
+    assert '"critical_issues"' not in report
+
+
+def test_reviewer_rejects_malformed_structured_output(monkeypatch, tmp_path) -> None:
+    # Given: a reviewer response outside the required schema
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runner = build_runtime(tmp_path).subagents
+    monkeypatch.setattr(
+        runner.provider,
+        "complete",
+        lambda _request: CompletionResponse("Looks fine to me.", (), TokenUsage(0, 0), "stop"),
+    )
+
+    # When / Then: the runner fails closed instead of returning free-form prose
+    with pytest.raises(SubagentError, match="invalid report"):
+        runner.run("reviewer", "review the current diff")
+
+
+def test_reviewer_redacts_findings_before_rendering(monkeypatch, tmp_path) -> None:
+    # Given: a structured reviewer report containing a credential-shaped value
+    secret = "sk-proj-syntheticcredential1234567890"
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runner = build_runtime(tmp_path).subagents
+    payload = _reviewer_payload(warnings=[f"forge/a.py: leaks {secret}"])
+    monkeypatch.setattr(
+        runner.provider,
+        "complete",
+        lambda _request: CompletionResponse(payload, (), TokenUsage(0, 0), "stop"),
+    )
+
+    # When: the validated report reaches the parent
+    report = runner.run("reviewer", "review the current diff")
+
+    # Then: the credential never appears in the rendered report
+    assert secret not in report
+    assert "[REDACTED]" in report
+    assert "Verdict\n- approve" in report
