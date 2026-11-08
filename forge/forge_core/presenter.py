@@ -45,6 +45,24 @@ class AgentPresenter(Protocol):
     def response_completed(self, content: str) -> None: ...
 
 
+class SubagentActivity(Protocol):
+    """Observability boundary for read-only subagent tool activity."""
+
+    def subagent_tool_started(self, agent_name: str, tool_name: str, arguments: str) -> None: ...
+
+    def subagent_tool_completed(self, agent_name: str, tool_name: str, result: str) -> None: ...
+
+
+class NullSubagentActivity:
+    """Activity adapter used when no external observer is present."""
+
+    def subagent_tool_started(self, agent_name: str, tool_name: str, arguments: str) -> None:
+        return None
+
+    def subagent_tool_completed(self, agent_name: str, tool_name: str, result: str) -> None:
+        return None
+
+
 class SilentPresenter:
     """Safe non-interactive presenter that denies privileged actions."""
 

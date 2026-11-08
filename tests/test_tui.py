@@ -16,6 +16,7 @@ import forge.ui.app as app_module
 import forge.ui.commands as commands_module
 from forge.forge import build_runtime
 from forge.forge_core.agent import ForgeAgent
+from forge.forge_core.provider import CompletionResponse, ProviderToolCall, TokenUsage
 from forge.ui.app import ForgeApp
 from forge.ui.approval import ApprovalScreen
 from forge.ui.commands import CommandService
@@ -463,6 +464,69 @@ async def test_agents_command_opens_browser_with_details(tmp_path) -> None:
         # Then: the composer stays empty
         assert not isinstance(app.screen, SubagentSelectScreen)
         assert composer.text == ""
+
+
+@pytest.mark.asyncio
+async def test_agents_browser_shows_current_task_and_tool(tmp_path) -> None:
+    # Given: an Explore delegation with a task and a tool in progress
+    app = ForgeApp(skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+
+    async with app.run_test(size=(100, 32)) as pilot:
+        app.subagent_session.begin("explore", "locate authentication code")
+        app.subagent_session.record_tool("explore", "search_files")
+        composer = app.query_one("#composer", TextArea)
+
+        # When: the user opens the subagent browser
+        composer.text = "/agents"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        # Then: the delegated objective and active tool are inspectable
+        detail = str(app.screen.query_one("#agents-detail", Static).content)
+        assert "locate authentication code" in detail
+        assert "Current tool\n  search_files" in detail
+
+
+@pytest.mark.asyncio
+async def test_visible_delegation_streams_tool_activity(monkeypatch, tmp_path) -> None:
+    # Given: a runtime whose Explore role calls one tool before reporting
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    responses = iter(
+        (
+            CompletionResponse(
+                None,
+                (ProviderToolCall("call-1", "list_files", "{}"),),
+                TokenUsage(0, 0),
+                "tool_calls",
+            ),
+            CompletionResponse("The repository is empty.", (), TokenUsage(0, 0), "stop"),
+        )
+    )
+    monkeypatch.setattr(runtime.subagents.provider, "complete", lambda _request: next(responses))
+    app = ForgeApp(runtime, skip_startup=True, preferences_path=tmp_path / "preferences.toml")
+
+    async with app.run_test(size=(100, 40)) as pilot:
+        composer = app.query_one("#composer", TextArea)
+
+        # When: the user delegates an objective to Explore
+        composer.text = "/agent explore inspect the repository"
+        await pilot.press("enter")
+        for _ in range(200):
+            await pilot.pause()
+            if not app._busy:
+                break
+
+        # Then: begin, per-tool activity, and the final report are visible
+        transcript = app.query_one("#conversation", ConversationView).transcript
+        assert "Delegating to explore: inspect the repository" in transcript
+        assert "EXPLORE TOOL list_files" in transcript
+        assert "EXPLORE TOOL list_files COMPLETE" in transcript
+        assert "SUBAGENT EXPLORE" in transcript
+        assert "The repository is empty." in transcript
+        state = app.subagent_session.state("explore")
+        assert state.objective == "inspect the repository"
+        assert state.current_tool == ""
 
 
 @pytest.mark.asyncio

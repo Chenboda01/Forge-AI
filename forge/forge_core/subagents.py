@@ -6,7 +6,12 @@ from threading import Event, Lock
 from typing import Any
 
 from .instructions import ProjectInstructions, TaskMetadata
-from .presenter import AgentLifecycle, NullLifecycle
+from .presenter import (
+    AgentLifecycle,
+    NullLifecycle,
+    NullSubagentActivity,
+    SubagentActivity,
+)
 from .provider import CompletionRequest, ForgeProviderError, ProviderClient
 from .redaction import redact_text
 from .reviewer_report import (
@@ -114,11 +119,13 @@ class SubagentRunner:
         project_instructions: ProjectInstructions | None = None,
         *,
         lifecycle: AgentLifecycle | None = None,
+        activity: SubagentActivity | None = None,
     ) -> None:
         self.tool_registry = tool_registry
         self.provider = provider
         self.project_instructions = project_instructions or ProjectInstructions()
         self.lifecycle = lifecycle or NullLifecycle()
+        self.activity = activity or NullSubagentActivity()
         self.task_metadata: TaskMetadata = self.project_instructions.task_metadata
         self._cancel_requested = Event()
         self._cancel_lock = Lock()
@@ -233,6 +240,9 @@ class SubagentRunner:
                 self._raise_if_interrupted()
                 tool_name = tool_call.name
                 raw_arguments = tool_call.arguments or "{}"
+                self.activity.subagent_tool_started(
+                    spec.name, tool_name, redact_text(raw_arguments)
+                )
                 try:
                     arguments = json.loads(raw_arguments)
                 except json.JSONDecodeError:
@@ -242,6 +252,7 @@ class SubagentRunner:
                         result = tools.execute(tool_name, arguments)
                     except ToolError as error:
                         result = f"Tool error: {error}"
+                self.activity.subagent_tool_completed(spec.name, tool_name, redact_text(result))
                 messages.append(
                     {
                         "role": "tool",

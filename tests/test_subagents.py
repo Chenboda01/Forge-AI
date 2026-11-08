@@ -3,7 +3,12 @@ import json
 import pytest
 
 from forge.forge import build_runtime
-from forge.forge_core.provider import CompletionRequest, CompletionResponse, TokenUsage
+from forge.forge_core.provider import (
+    CompletionRequest,
+    CompletionResponse,
+    ProviderToolCall,
+    TokenUsage,
+)
 from forge.forge_core.subagents import SUBAGENTS, SubagentError
 from forge.ui.commands import CommandService
 
@@ -87,6 +92,86 @@ def test_subagent_reports_its_turn_lifecycle(monkeypatch, tmp_path) -> None:
 
     # Then: the observer sees a working turn that returns to idle
     assert lifecycle.events == ["turn_started", "turn_finished"]
+
+
+class RecordingActivity:
+    def __init__(self) -> None:
+        self.started: list[tuple[str, str, str]] = []
+        self.completed: list[tuple[str, str, str]] = []
+
+    def subagent_tool_started(self, agent_name: str, tool_name: str, arguments: str) -> None:
+        self.started.append((agent_name, tool_name, arguments))
+
+    def subagent_tool_completed(self, agent_name: str, tool_name: str, result: str) -> None:
+        self.completed.append((agent_name, tool_name, result))
+
+
+class _EchoTools:
+    def definitions(self) -> tuple[dict[str, object], ...]:
+        return ()
+
+    def execute(self, name: str, arguments: dict[str, object]) -> str:
+        return str(arguments["value"])
+
+
+def test_subagent_reports_per_tool_activity(monkeypatch, tmp_path) -> None:
+    # Given: a subagent provider that calls one read-only tool before reporting
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    activity = RecordingActivity()
+    runtime.subagents.activity = activity
+    responses = iter(
+        (
+            CompletionResponse(
+                None,
+                (ProviderToolCall("call-1", "list_files", "{}"),),
+                TokenUsage(0, 0),
+                "tool_calls",
+            ),
+            CompletionResponse("Found 2 files.", (), TokenUsage(0, 0), "stop"),
+        )
+    )
+    monkeypatch.setattr(runtime.subagents.provider, "complete", lambda _request: next(responses))
+
+    # When: the Explore subagent runs its delegated objective
+    assert runtime.subagents.run("explore", "inspect the repository") == "Found 2 files."
+
+    # Then: the observer sees the role-prefixed tool start and completion
+    assert activity.started == [("explore", "list_files", "{}")]
+    assert len(activity.completed) == 1
+    assert activity.completed[0][:2] == ("explore", "list_files")
+
+
+def test_subagent_activity_redacts_credentials(monkeypatch, tmp_path) -> None:
+    # Given: a tool whose arguments and result carry a credential-shaped value
+    secret = "sk-proj-syntheticcredential1234567890"
+    monkeypatch.setenv("FORGE_MODEL", "ollama")
+    runtime = build_runtime(tmp_path)
+    activity = RecordingActivity()
+    runtime.subagents.activity = activity
+    echo = _EchoTools()
+    monkeypatch.setattr(runtime.subagents.tool_registry, "only", lambda _names: echo)
+    responses = iter(
+        (
+            CompletionResponse(
+                None,
+                (ProviderToolCall("call-1", "list_files", json.dumps({"value": secret})),),
+                TokenUsage(0, 0),
+                "tool_calls",
+            ),
+            CompletionResponse("done", (), TokenUsage(0, 0), "stop"),
+        )
+    )
+    monkeypatch.setattr(runtime.subagents.provider, "complete", lambda _request: next(responses))
+
+    # When: the subagent executes the tool and reports
+    runtime.subagents.run("explore", "inspect")
+
+    # Then: the display boundary never receives the raw credential
+    assert secret not in activity.started[0][2]
+    assert "[REDACTED]" in activity.started[0][2]
+    assert secret not in activity.completed[0][2]
+    assert "[REDACTED]" in activity.completed[0][2]
 
 
 def test_subagent_discards_report_after_interrupt(monkeypatch, tmp_path) -> None:

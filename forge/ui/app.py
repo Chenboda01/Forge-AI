@@ -138,6 +138,7 @@ class ForgeApp(App[None]):
         self.subagent_session = SubagentSession()
         if runtime is not None:
             runtime.agent.presenter = self
+            runtime.subagents.activity = self
 
     async def action_open_agents(self) -> None:
         if len(self.screen_stack) != 1:
@@ -550,7 +551,7 @@ class ForgeApp(App[None]):
             "notice",
         )
         self._active_subagent = agent_name
-        self.subagent_session.begin(agent_name)
+        self.subagent_session.begin(agent_name, objective)
         self._set_busy(True, label=f"{agent_name} working")
         self.run_subagent(agent_name, objective)
 
@@ -596,6 +597,31 @@ class ForgeApp(App[None]):
     def _complete_subagent(self) -> None:
         self._active_subagent = None
         self._set_busy(False)
+
+    def subagent_tool_started(self, agent_name: str, tool_name: str, arguments: str) -> None:
+        self.call_from_thread(self.subagent_session.record_tool, agent_name, tool_name)
+        self.call_from_thread(
+            self.query_one("#activity-row", ActivityProgress).set_phase,
+            f"{agent_name} · {tool_name}",
+        )
+        self.call_from_thread(
+            self._append_entry,
+            f"{agent_name.upper()} TOOL {tool_name}",
+            arguments[:2_000],
+            "tool",
+        )
+
+    def subagent_tool_completed(self, agent_name: str, tool_name: str, result: str) -> None:
+        self.call_from_thread(
+            self.query_one("#activity-row", ActivityProgress).set_phase,
+            f"{agent_name} working",
+        )
+        self.call_from_thread(
+            self._append_entry,
+            f"{agent_name.upper()} TOOL {tool_name} COMPLETE",
+            result[:4_000],
+            "tool",
+        )
 
     @work(thread=True, exclusive=True, group="agent")
     def compact_conversation(self) -> None:
