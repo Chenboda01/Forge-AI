@@ -1,3 +1,4 @@
+import subprocess
 from types import SimpleNamespace
 
 import forge.ui.clipboard as clipboard
@@ -12,6 +13,9 @@ def test_copy_to_clipboard_uses_the_first_successful_tool(monkeypatch) -> None:
 
     def fake_run(command: tuple[str, ...], **kwargs: object) -> SimpleNamespace:
         inputs.append(str(kwargs["input"]))
+        assert kwargs["stdout"] is subprocess.DEVNULL
+        assert kwargs["stderr"] is subprocess.DEVNULL
+        assert "capture_output" not in kwargs
         return SimpleNamespace(returncode=next(returncodes))
 
     monkeypatch.setattr(clipboard.subprocess, "run", fake_run)
