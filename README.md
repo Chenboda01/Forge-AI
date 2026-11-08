@@ -78,6 +78,8 @@ Themes are selected with `/theme` and saved for the current operating-system use
 
 `/agents` opens a browser for the read-only subagents. Each entry shows its description, allowed tools, step limit, status, and run count; the title shows the session number so a reset is visible. Pressing Enter on a role opens the highlighted message box with the field focused, and Enter in that box sends the prompt; Talk stays off until then. `/agents NAME` prints the same detail directly. Press `Ctrl+X` to open the same browser immediately; left and right move between agents, and Escape closes. Subagent runs and reports are session-scoped: `/new` and restarting Forge clear them and start a new session number. The status rail shows `Still waiting...` until a subagent runs in the session, then how many are ready and which one is active while delegation runs.
 
+Selecting text in the interface copies it automatically once the highlight settles. A toast reports success with a green check; if no supported clipboard tool is available or it fails, the toast reports failure with a red cross. Forge uses `wl-copy`, `xclip`, or `xsel` on Linux, `pbcopy` on macOS, and `clip.exe` on Windows.
+
 `/force-stop` interrupts an active run after the edit in progress settles, then asks what to do with the changes: keep them, revert only the current edit, or revert every change from the task. Use the left and right arrows and Enter to choose, or Esc to cancel without reverting. The composer and queued messages are cleared before the run is interrupted.
 
 ## Workspace and Patches
