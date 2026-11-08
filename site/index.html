@@ -298,7 +298,7 @@
         </div>
         <div class="cap-card">
           <h3>Read-only subagents</h3>
-          <p>Explore and Reviewer receive isolated history, filtered read-only tools, fixed step limits, and no recursive delegation. The Reviewer returns a schema-validated report — critical issues, warnings, suggestions, missing tests, and an <code>approve</code> or <code>request_changes</code> verdict — and malformed output fails closed. <code>/agents</code> browses each role before delegating, and reports come back as evidence.</p>
+          <p>Explore and Reviewer receive isolated history, filtered read-only tools, fixed step limits, and no recursive delegation. The Reviewer returns a schema-validated report — critical issues, warnings, suggestions, missing tests, and an <code>approve</code> or <code>request_changes</code> verdict — and malformed output fails closed. <code>/agents</code> browses each role before delegating, shows the delegated task and current tool while it works, and streams per-tool activity into the conversation; reports come back as evidence.</p>
           <span class="cap-evidence">tests/test_subagents.py · tests/test_reviewer_report.py · tests/test_tui.py</span>
         </div>
         <div class="cap-card">
@@ -412,7 +412,7 @@
       <p>Remaining work includes:</p>
       <ul>
         <li>Tester and Coder subagents.</li>
-        <li>A structured event bus with per-tool subagent activity.</li>
+        <li>A structured event bus separating core logic from rendering.</li>
         <li>Slash, path, model, and mention autocomplete.</li>
         <li>A benchmark suite that measures self-improvement.</li>
         <li>A cross-platform test matrix and evidence-backed support statement.</li>
