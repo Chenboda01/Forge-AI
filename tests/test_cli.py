@@ -34,7 +34,7 @@ def test_version_reports_release_without_starting_runtime(monkeypatch) -> None:
 
     # Then: the release version is emitted without provider initialization
     assert result.exit_code == 0
-    assert "5.0.0" in result.output
+    assert "0.7" in result.output
 
 
 def test_doctor_reports_project_directory(monkeypatch, tmp_path: Path) -> None:

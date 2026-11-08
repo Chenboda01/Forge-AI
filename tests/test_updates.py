@@ -245,7 +245,7 @@ def test_release_version_matches_project_metadata() -> None:
     site_html = Path("site/index.html").read_text(encoding="utf-8")
 
     # When: semantic public version labels are collected
-    site_versions = set(re.findall(r"\bv(\d+\.\d+\.\d+)\b", site_html))
+    site_versions = set(re.findall(r"\bv(\d+(?:\.\d+)+)", site_html))
 
     # Then: every maintained version surface identifies the runtime release
     assert project["project"]["version"] == __version__
