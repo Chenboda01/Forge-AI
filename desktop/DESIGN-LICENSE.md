@@ -1,4 +1,3 @@
-
 # Forge Crystal UI
 
 Copyright © 2026 Boda Chen.
@@ -46,4 +45,3 @@ proprietary source code, logos, or artwork.
 
 Third-party libraries retain their respective
 licenses and copyright notices.
-

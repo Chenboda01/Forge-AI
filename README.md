@@ -119,3 +119,27 @@ The authoritative policies are:
 * `../TESTING.md`
 
 Report security issues privately and use synthetic credentials in reproductions.
+
+### Design Attribution
+
+Forge AI Desktop features an original glass-inspired interface built using HTML, CSS, and JavaScript.
+
+The visual design uses standard web technologies, including backdrop filters, gradients, translucency, and animated highlights.
+
+Forge AI Desktop is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Apple Inc.
+
+"Apple" and "Liquid Glass" are trademarks or designations associated with Apple Inc. All respective trademarks belong to their owners.
+
+**License:** MIT License.
+
+Copyright © 2026 Boda Chen.
+
+### 💎 Forge Crystal UI
+
+Forge AI Desktop features **Forge Crystal UI**, a glass-inspired interface with translucent panels, dynamic reflections, and animated progress indicators.
+
+The interface is independently implemented using standard web technologies.
+
+Forge AI Desktop is not affiliated with or endorsed by Apple Inc.
+
+**License:** MIT — see [DESIGN-LICENSE.md](desktop/DESIGN-LICENSE.md).

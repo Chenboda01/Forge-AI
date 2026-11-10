@@ -1,0 +1,74 @@
+name: Desktop Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'desktop-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            squashfs-tools dpkg fakeroot rpm
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install Python dependencies
+        run: uv sync --locked
+
+      - name: Build bundled Forge engine
+        env:
+          FORGE_PYTHON_PROJECT: ${{ github.workspace }}
+          FORGE_PYTHON: ${{ github.workspace }}/.venv/bin/python
+        working-directory: desktop
+        run: ./scripts/build-forge-payload.sh
+
+      - name: Verify bundled engine
+        working-directory: desktop
+        run: ./resources/forge/forge --version
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build Linux packages
+        working-directory: desktop
+        run: npm run make
+
+      - name: List produced artifacts
+        working-directory: desktop
+        run: |
+          find out/make -type f \
+            \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) \
+            -print
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-ai-desktop-linux
+          if-no-files-found: error
+          path: |
+            desktop/out/make/**/*.AppImage
+            desktop/out/make/**/*.deb
+            desktop/out/make/**/*.rpm
