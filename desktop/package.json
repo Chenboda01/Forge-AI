@@ -1,7 +1,8 @@
 {
   "name": "forge-ai-desktop",
   "productName": "Forge AI Desktop",
-  "version": "1.0.0",
+  "desktopName": "forge-ai-desktop.desktop",
+  "version": "1.1.0",
   "private": true,
   "description": "Desktop shell for the Forge AI coding agent.",
   "keywords": [

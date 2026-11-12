@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from time import monotonic
 from typing import TYPE_CHECKING, Final

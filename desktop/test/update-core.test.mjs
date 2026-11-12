@@ -19,12 +19,18 @@ const asset = (name, extra = {}) => ({
   ...extra,
 });
 
+const signedAssets = (name = 'Forge-AI-Desktop-1.2.0-x86_64.AppImage') => [
+  asset(name),
+  asset('SHA256SUMS', { id: 20 }),
+  asset('SHA256SUMS.sig', { id: 21 }),
+];
+
 const release = (version, options = {}) => ({
   tag_name: `desktop-v${version}`,
   name: `Forge AI Desktop ${version}`,
   body: 'Release notes',
   html_url: `https://github.com/Chenboda01/Forge-AI/releases/tag/desktop-v${version}`,
-  assets: [asset('Forge-AI-Desktop-1.2.0-x86_64.AppImage')],
+  assets: signedAssets(),
   ...options,
 });
 
@@ -152,7 +158,11 @@ test('resolveUpdateState reports an available update with asset metadata', () =>
   const state = resolveUpdateState(
     release('1.2.0', {
       body: 'x'.repeat(4000),
-      assets: [asset('Forge-AI-Desktop-1.2.0-x86_64.AppImage', { id: 9 })],
+      assets: [
+        asset('Forge-AI-Desktop-1.2.0-x86_64.AppImage', { id: 9 }),
+        asset('SHA256SUMS', { id: 20 }),
+        asset('SHA256SUMS.sig', { id: 21 }),
+      ],
     }),
     '1.0.0',
   );
@@ -167,10 +177,41 @@ test('resolveUpdateState reports an available update with asset metadata', () =>
   );
   assert.equal(state.asset.id, 9);
   assert.equal(state.asset.name, 'Forge-AI-Desktop-1.2.0-x86_64.AppImage');
+  assert.equal(state.assetError, null);
+  assert.equal(state.asset.manifest.name, 'SHA256SUMS');
+  assert.equal(state.asset.signature.name, 'SHA256SUMS.sig');
   assert.equal(
     state.asset.url,
     'https://github.com/Chenboda01/Forge-AI/releases/download/desktop-v1.2.0/Forge-AI-Desktop-1.2.0-x86_64.AppImage',
   );
+});
+
+test('resolveUpdateState refuses to download unsigned releases', () => {
+  const state = resolveUpdateState(
+    release('1.2.0', {
+      assets: [asset('Forge-AI-Desktop-1.2.0-x86_64.AppImage')],
+    }),
+    '1.0.0',
+  );
+
+  assert.equal(state.status, 'update-available');
+  assert.equal(state.asset, null);
+  assert.equal(state.assetError, 'missing-signature');
+});
+
+test('resolveUpdateState requires both manifest and signature', () => {
+  const state = resolveUpdateState(
+    release('1.2.0', {
+      assets: [
+        asset('Forge-AI-Desktop-1.2.0-x86_64.AppImage'),
+        asset('SHA256SUMS'),
+      ],
+    }),
+    '1.0.0',
+  );
+
+  assert.equal(state.asset, null);
+  assert.equal(state.assetError, 'missing-signature');
 });
 
 test('resolveUpdateState allows an update with no Linux asset', () => {
@@ -181,6 +222,7 @@ test('resolveUpdateState allows an update with no Linux asset', () => {
 
   assert.equal(state.status, 'update-available');
   assert.equal(state.asset, null);
+  assert.equal(state.assetError, 'no-compatible-asset');
 });
 
 test('resolveUpdateState rejects uncomparable versions', () => {

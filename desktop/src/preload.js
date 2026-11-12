@@ -32,6 +32,15 @@ contextBridge.exposeInMainWorld('forgeDesktop', {
     return subscribe('forge:status', callback);
   },
 
+  taskbar: {
+    status() {
+      return ipcRenderer.invoke('taskbar:status');
+    },
+    install() {
+      return ipcRenderer.invoke('taskbar:install');
+    },
+  },
+
   updater: {
     version() {
       return ipcRenderer.invoke('updater:version');

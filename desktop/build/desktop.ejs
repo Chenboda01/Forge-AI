@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=<%= productName %>
+<% if (typeof genericName !== 'undefined' && genericName) { %>GenericName=<%= genericName %>
+<% } %><% if (typeof description !== 'undefined' && description) { %>Comment=<%= description %>
+<% } %>Exec=<%= name %> %U
+Icon=<%= name %>
+Type=Application
+Terminal=false
+StartupNotify=true
+StartupWMClass=<%= name %>
+<% if (typeof categories !== 'undefined' && categories && categories.length) { %>Categories=<%= categories.join(';') %>;
+<% } %><% if (typeof mimeType !== 'undefined' && mimeType && mimeType.length) { %>MimeType=<%= mimeType.join(';') %>;
+<% } %>

@@ -1,6 +1,14 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
+import startupArt from './assets/forge-startup.png';
+import {
+  SPLASH_FADE_MS,
+  SPLASH_MAX_VISIBLE_MS,
+  SPLASH_MIN_VISIBLE_MS,
+  SPLASH_TEXT,
+  shouldDismissSplash,
+} from './splash-core.mjs';
 import './index.css';
 
 const api = window.forgeDesktop;
@@ -8,6 +16,21 @@ const updater = api.updater;
 const $ = (selector) => document.querySelector(selector);
 
 document.querySelector('#app').innerHTML = `
+  <div id="splash" class="splash" role="status">
+    <div class="splash-content">
+      <img
+        class="splash-art"
+        src="${startupArt}"
+        alt=""
+        width="640"
+        height="640"
+        draggable="false"
+      >
+      <p class="splash-title">${SPLASH_TEXT}</p>
+      <div class="splash-shimmer" aria-hidden="true"></div>
+    </div>
+  </div>
+
   <div class="app">
     <header class="header">
       <div class="branding">
@@ -22,6 +45,13 @@ document.querySelector('#app').innerHTML = `
         <span id="session-count">0 sessions</span>
         <button id="update-button" class="update-button">
           ✦ Check for Updates
+        </button>
+        <button
+          id="taskbar-button"
+          class="taskbar-button"
+          title="Add Forge to your application launcher"
+        >
+          ⌖ Taskbar
         </button>
         <button id="restart">↻ Restart</button>
       </div>
@@ -160,8 +190,135 @@ document.querySelector('#app').innerHTML = `
         </div>
       </section>
     </div>
+
+    <div id="taskbar-overlay" class="update-overlay hidden">
+      <section
+        id="taskbar-panel"
+        class="glass-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="taskbar-title"
+        tabindex="-1"
+      >
+        <div class="glass-shine"></div>
+
+        <div class="glass-top">
+          <div class="glass-icon">⌖</div>
+          <button
+            id="close-taskbar"
+            class="close-glass"
+            aria-label="Close taskbar setup"
+          >×</button>
+        </div>
+
+        <h2 id="taskbar-title">Taskbar Shortcut</h2>
+        <p id="taskbar-message" class="update-message">
+          Checking shortcut status...
+        </p>
+
+        <div class="version-row">
+          <span>Shortcut file</span>
+          <strong id="taskbar-path">...</strong>
+        </div>
+
+        <div id="taskbar-appimage-row" class="version-row hidden">
+          <span>AppImage</span>
+          <strong id="taskbar-appimage">...</strong>
+        </div>
+
+        <div
+          id="taskbar-result"
+          class="update-result"
+          role="status"
+          aria-live="polite"
+        ></div>
+
+        <ol class="taskbar-steps">
+          <li>Install the shortcut for this user.</li>
+          <li>Open the application launcher.</li>
+          <li>
+            Right-click <strong>Forge AI Desktop</strong> and choose
+            <strong>Pin to Taskbar</strong>.
+          </li>
+        </ol>
+
+        <p class="taskbar-note">
+          AppImages are copied to ~/Applications so rebuilds and updates keep
+          the launcher working. KDE controls taskbar pinning. Forge never edits
+          panel configuration or reports the application as pinned until you
+          pin it yourself.
+        </p>
+
+        <div class="glass-actions">
+          <button id="taskbar-install" class="scarlet-button">
+            Install Shortcut
+          </button>
+
+          <button id="taskbar-close" class="secondary-button">
+            Close
+          </button>
+        </div>
+      </section>
+    </div>
   </div>
 `;
+
+const splash = $('#splash');
+const splashShownAt = performance.now();
+let terminalReady = false;
+let splashDismissed = false;
+let splashHideTimer = null;
+
+function clearSplashCheckTimers() {
+  window.clearTimeout(splashMinimumTimer);
+  window.clearTimeout(splashMaximumTimer);
+}
+
+function finishSplashDismissal() {
+  splash.classList.add('hidden');
+  splash.setAttribute('aria-hidden', 'true');
+}
+
+function dismissSplash() {
+  if (splashDismissed) return;
+
+  splashDismissed = true;
+  clearSplashCheckTimers();
+  splash.classList.add('splash-leaving');
+  splashHideTimer = window.setTimeout(finishSplashDismissal, SPLASH_FADE_MS);
+}
+
+function hideSplashImmediately() {
+  splashDismissed = true;
+  clearSplashCheckTimers();
+
+  if (splashHideTimer !== null) {
+    window.clearTimeout(splashHideTimer);
+  }
+
+  splash.classList.add('splash-leaving', 'hidden');
+  splash.setAttribute('aria-hidden', 'true');
+}
+
+function checkSplashDismissal() {
+  if (
+    shouldDismissSplash({
+      elapsedMs: performance.now() - splashShownAt,
+      terminalReady,
+    })
+  ) {
+    dismissSplash();
+  }
+}
+
+const splashMinimumTimer = window.setTimeout(
+  checkSplashDismissal,
+  SPLASH_MIN_VISIBLE_MS,
+);
+const splashMaximumTimer = window.setTimeout(
+  dismissSplash,
+  SPLASH_MAX_VISIBLE_MS,
+);
 
 // --------------------------------------------------
 // MULTIPLE FORGE TERMINAL TABS
@@ -378,6 +535,8 @@ async function newTab() {
     }
 
     session.running = true;
+    terminalReady = true;
+    checkSplashDismissal();
     updateTabs();
 
     // Redraw after the PTY has started.
@@ -403,6 +562,7 @@ async function newTab() {
     if (first) activateTab(first);
     else updateTabs();
 
+    hideSplashImmediately();
     window.alert(error.message);
   } finally {
     creating = false;
@@ -555,17 +715,22 @@ window.addEventListener('keydown', (event) => {
 });
 
 // Moving liquid reflection.
-$('#glass-panel').addEventListener('pointermove', (event) => {
-  const rect = event.currentTarget.getBoundingClientRect();
+function trackGlassPointer(panel) {
+  panel.addEventListener('pointermove', (event) => {
+    const rect = panel.getBoundingClientRect();
 
-  const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
 
-  const y = ((event.clientY - rect.top) / rect.height) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
 
-  event.currentTarget.style.setProperty('--x', `${x}%`);
+    panel.style.setProperty('--x', `${x}%`);
 
-  event.currentTarget.style.setProperty('--y', `${y}%`);
-});
+    panel.style.setProperty('--y', `${y}%`);
+  });
+}
+
+trackGlassPointer($('#glass-panel'));
+trackGlassPointer($('#taskbar-panel'));
 
 // Actual GitHub checking stages.
 const unsubscribeCheck = updater.onCheckProgress(({ percent, message }) => {
@@ -632,9 +797,14 @@ $('#update-button').addEventListener('click', async () => {
         );
 
         $('#download-button').classList.remove('hidden');
+      } else if (result.assetError === 'missing-signature') {
+        setResult(
+          'A newer release exists, but it has no signed release manifest. Download it from GitHub instead.',
+          'available',
+        );
       } else {
         setResult(
-          'A newer release exists, but no compatible Linux AppImage was found.',
+          'A newer release exists, but no compatible signed Linux AppImage was found.',
           'available',
         );
       }
@@ -672,7 +842,7 @@ $('#download-button').addEventListener('click', async () => {
     $('#update-message').textContent = 'Download complete';
 
     setResult(
-      `Update saved to ${result.path}. Installation is manual.`,
+      `Update saved to ${result.path}. Signature and SHA-256 verified. Installation is manual.`,
       'success',
     );
 
@@ -695,6 +865,135 @@ $('#downloads-button').addEventListener('click', () => {
   updater.openDownloads();
 });
 
+// Taskbar shortcut setup. The panel reports the entry file and the exact
+// manual pinning steps; it never claims the application is pinned.
+let taskbarBusy = false;
+
+function setTaskbarResult(message, type = '') {
+  const element = $('#taskbar-result');
+  element.className = `update-result ${type}`;
+  element.textContent = message;
+}
+
+function showTaskbar() {
+  $('#taskbar-overlay').classList.remove('hidden');
+  $('#taskbar-panel').focus();
+}
+
+function hideTaskbar() {
+  if (taskbarBusy) return;
+  $('#taskbar-overlay').classList.add('hidden');
+  $('#taskbar-button').focus();
+}
+
+function setTaskbarBusy(busy) {
+  taskbarBusy = busy;
+  $('#taskbar-button').disabled = busy;
+  $('#close-taskbar').disabled = busy;
+  $('#taskbar-install').disabled = busy;
+}
+
+async function openTaskbar() {
+  if (taskbarBusy) return;
+
+  showTaskbar();
+  setTaskbarResult('');
+  $('#taskbar-message').textContent = 'Checking shortcut status...';
+  $('#taskbar-path').textContent = '...';
+  $('#taskbar-appimage-row').classList.add('hidden');
+  $('#taskbar-appimage').textContent = '...';
+  $('#taskbar-install').classList.add('hidden');
+  setTaskbarBusy(true);
+
+  try {
+    const status = await api.taskbar.status();
+
+    if (!status) {
+      throw new Error('Taskbar status unavailable');
+    }
+
+    $('#taskbar-message').textContent = status.message;
+    $('#taskbar-path').textContent =
+      status.kind === 'system'
+        ? status.systemEntryPath
+        : status.entryPath || 'Not installed';
+
+    if (status.kind === 'appimage' && status.appImagePath) {
+      $('#taskbar-appimage-row').classList.remove('hidden');
+      $('#taskbar-appimage').textContent = status.appImagePath;
+    }
+
+    if (
+      status.supported &&
+      (!status.installed || status.needsAppImageInstall)
+    ) {
+      $('#taskbar-install').classList.remove('hidden');
+    }
+  } catch (error) {
+    $('#taskbar-message').textContent = 'Taskbar shortcut unavailable';
+    setTaskbarResult(error.message, 'error');
+  } finally {
+    setTaskbarBusy(false);
+  }
+}
+
+$('#taskbar-button').addEventListener('click', openTaskbar);
+$('#close-taskbar').addEventListener('click', hideTaskbar);
+$('#taskbar-close').addEventListener('click', hideTaskbar);
+
+$('#taskbar-overlay').addEventListener('click', (event) => {
+  if (event.target === $('#taskbar-overlay')) {
+    hideTaskbar();
+  }
+});
+
+window.addEventListener('keydown', (event) => {
+  if (
+    event.key === 'Escape' &&
+    !$('#taskbar-overlay').classList.contains('hidden')
+  ) {
+    event.preventDefault();
+    hideTaskbar();
+  }
+});
+
+$('#taskbar-install').addEventListener('click', async () => {
+  if (taskbarBusy) return;
+
+  setTaskbarBusy(true);
+  setTaskbarResult('');
+  $('#taskbar-message').textContent = 'Installing shortcut...';
+
+  try {
+    const result = await api.taskbar.install();
+
+    if (!result) {
+      throw new Error('Taskbar install failed');
+    }
+
+    $('#taskbar-path').textContent = result.path;
+    $('#taskbar-message').textContent = result.message;
+
+    if (result.appImagePath) {
+      $('#taskbar-appimage-row').classList.remove('hidden');
+      $('#taskbar-appimage').textContent = result.appImagePath;
+    }
+
+    $('#taskbar-install').classList.add('hidden');
+    setTaskbarResult(
+      result.copied
+        ? 'AppImage installed to ~/Applications. Pin it from the application launcher.'
+        : 'Shortcut ready. Pin it from the application launcher.',
+      'success',
+    );
+  } catch (error) {
+    $('#taskbar-message').textContent = 'Shortcut install failed';
+    setTaskbarResult(error.message, 'error');
+  } finally {
+    setTaskbarBusy(false);
+  }
+});
+
 // Read the installed application version.
 updater
   .version()
@@ -713,6 +1012,12 @@ newTab();
 // Clean up when Vite reloads the renderer.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    clearSplashCheckTimers();
+
+    if (splashHideTimer !== null) {
+      window.clearTimeout(splashHideTimer);
+    }
+
     resizeObserver.disconnect();
 
     unsubscribeData();

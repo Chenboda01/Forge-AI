@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Forge AI Desktop
+GenericName=Forge AI Desktop
+Comment=Desktop shell for the Forge AI coding agent.
+Exec=forge-ai-desktop %U
+Icon=forge-ai-desktop
+Type=Application
+Terminal=false
+StartupNotify=true
+StartupWMClass=forge-ai-desktop
+Categories=Development;

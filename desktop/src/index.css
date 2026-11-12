@@ -36,6 +36,101 @@ button:focus-visible {
   display: none !important;
 }
 
+.splash {
+  --splash-background: #080d18;
+  --splash-cyan: #5ceaff;
+  --splash-emerald: #6ef3c5;
+  --splash-title: #eaf6ff;
+  --splash-space-2: 8px;
+  --splash-space-6: 24px;
+  --splash-fade-duration: 450ms;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: var(--splash-space-6);
+  background:
+    radial-gradient(
+      circle at 50% 42%,
+      color-mix(in srgb, var(--splash-emerald) 13%, transparent) 0,
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 50% 58%,
+      color-mix(in srgb, var(--splash-cyan) 8%, transparent) 0,
+      transparent 48%
+    ),
+    var(--splash-background);
+  opacity: 1;
+  transition: opacity var(--splash-fade-duration) ease-out;
+}
+
+.splash-content {
+  display: grid;
+  place-items: center;
+  gap: var(--splash-space-2);
+  text-align: center;
+}
+
+.splash-art {
+  display: block;
+  width: clamp(200px, 32vmin, 320px);
+  height: auto;
+  user-select: none;
+  pointer-events: none;
+  filter: drop-shadow(
+      0 0 30px color-mix(in srgb, var(--splash-emerald) 24%, transparent)
+    )
+    drop-shadow(
+      0 18px 48px color-mix(in srgb, var(--splash-cyan) 16%, transparent)
+    );
+}
+
+.splash-title {
+  margin: 0;
+  color: var(--splash-title);
+  font-family:
+    'Avenir Next', 'Segoe UI Variable Display', system-ui, sans-serif;
+  font-size: clamp(16px, 2.3vmin, 20px);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.035em;
+  text-wrap: balance;
+  text-shadow: 0 0 24px color-mix(in srgb, var(--splash-cyan) 28%, transparent);
+}
+
+.splash-shimmer {
+  position: relative;
+  width: min(240px, 44vw);
+  height: 1px;
+  margin-top: var(--splash-space-6);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--splash-title) 12%, transparent);
+}
+
+.splash-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--splash-emerald),
+    var(--splash-cyan),
+    transparent
+  );
+  transform: translateX(-140%);
+  animation: splash-shimmer 1.4s ease-in-out infinite;
+}
+
+#splash.splash-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .app {
   display: flex;
   flex-direction: column;
@@ -92,7 +187,8 @@ p {
 }
 
 #restart,
-#new-tab {
+#new-tab,
+#taskbar-button {
   padding: 9px 13px;
   border: 1px solid #334155;
   border-radius: 9px;
@@ -102,7 +198,8 @@ p {
 }
 
 #restart:hover,
-#new-tab:hover {
+#new-tab:hover,
+#taskbar-button:hover {
   background: #334155;
 }
 
@@ -549,6 +646,12 @@ p {
   }
 }
 
+@keyframes splash-shimmer {
+  to {
+    transform: translateX(140%);
+  }
+}
+
 @media (max-width: 700px) {
   .app {
     padding: 7px;
@@ -586,4 +689,34 @@ p {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+
+  .splash-shimmer::after {
+    animation: none;
+    transform: none;
+  }
+}
+
+.taskbar-steps {
+  margin: 20px 0 0;
+  padding-left: 20px;
+  color: #c6d9ed;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.taskbar-steps strong {
+  color: #eaf6ff;
+}
+
+.taskbar-note {
+  margin-top: 14px;
+  color: #9fbcd1;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+#taskbar-path {
+  max-width: 62%;
+  overflow-wrap: anywhere;
+  text-align: right;
 }

@@ -10,7 +10,8 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const iconPath = path.resolve(import.meta.dirname, 'assets', 'icon.png');
+import { appImageIconSet, linuxIconSet } from './build/icons.mjs';
+
 const projectUrl = 'https://github.com/Chenboda01/Forge-AI';
 // Pin the AppImage type-2 runtime instead of downloading it during the build.
 // The build must not depend on network availability or an unpinned upstream
@@ -19,6 +20,23 @@ const appImageRuntime = path.resolve(
   import.meta.dirname,
   'vendor',
   'appimage-runtime-x86_64',
+);
+// Shared FreeDesktop entry for the deb/rpm makers. The upstream defaults set
+// StartupWMClass to productName ("Forge AI Desktop"), but Electron derives the
+// X11 WM_CLASS from the sanitized executable name. Using `name` keeps the
+// launcher entry grouped with its window.
+const desktopTemplate = path.resolve(
+  import.meta.dirname,
+  'build',
+  'desktop.ejs',
+);
+// The AppImage maker generates a minimal desktop entry (raw binary name, no
+// StartupWMClass). Supply the same entry the deb/rpm makers render so the
+// AppImage launcher groups with its window.
+const appImageDesktop = path.resolve(
+  import.meta.dirname,
+  'build',
+  'forge-ai-desktop.desktop',
 );
 
 // node-pty ships sources and prebuilt binaries for every platform. Only the
@@ -59,12 +77,13 @@ const config = {
     asar: true,
     // Ship the self-contained Forge CLI payload (built by
     // scripts/build-forge-payload.sh) next to app.asar so the main process can
-    // launch it from process.resourcesPath.
-    extraResource: fs.existsSync(
+    // launch it from process.resourcesPath. The application icon set is
+    // packaged so the taskbar shortcut can install launcher icons for
+    // unpackaged trees and AppImages.
+    extraResource: [
       path.resolve(import.meta.dirname, 'resources', 'forge'),
-    )
-      ? [path.resolve(import.meta.dirname, 'resources', 'forge')]
-      : [],
+      path.resolve(import.meta.dirname, 'assets', 'app-icon'),
+    ].filter((resource) => fs.existsSync(resource)),
     // The Vite plugin normally copies only the `.vite` output, which drops
     // every runtime dependency. Keep the Vite bundle plus the native module
     // tree that must exist at runtime (node-pty) and the header-only build
@@ -90,23 +109,26 @@ const config = {
     new MakerZIP({}, ['darwin']),
     new MakerRpm({
       options: {
-        icon: iconPath,
-        categories: ['Development', 'Utility'],
+        desktopTemplate,
+        icon: linuxIconSet,
+        categories: ['Development'],
         homepage: projectUrl,
       },
     }),
     new MakerDeb({
       options: {
-        icon: iconPath,
-        categories: ['Development', 'Utility'],
+        desktopTemplate,
+        icon: linuxIconSet,
+        categories: ['Development'],
         maintainer: 'Boda Chen <chenboda01@users.noreply.github.com>',
         homepage: projectUrl,
       },
     }),
     new MakerAppImage({
       options: {
-        icon: iconPath,
-        categories: ['Development', 'Utility'],
+        icon: appImageIconSet,
+        desktopFile: appImageDesktop,
+        desktopName: 'forge-ai-desktop.desktop',
         runtime: appImageRuntime,
       },
     }),

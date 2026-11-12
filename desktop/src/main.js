@@ -10,6 +10,18 @@ import {
   openReleasePage,
   openDownloadsFolder,
 } from './update-service.js';
+import { getTaskbarStatus, installTaskbarShortcut } from './taskbar-service.js';
+
+// Linux desktop identity must be established before Chromium initializes.
+// app.setDesktopName maps to CHROME_DESKTOP, which Electron uses as the XDG
+// app id (Wayland) and WM_CLASS (X11). It must match the installed
+// forge-ai-desktop.desktop file so the window groups with its launcher icon.
+// package.json declares the same desktopName for the pre-JavaScript path.
+app.setName('Forge AI Desktop');
+
+if (process.platform === 'linux' && typeof app.setDesktopName === 'function') {
+  app.setDesktopName('forge-ai-desktop.desktop');
+}
 
 const requireNative = createRequire(
   path.join(app.getAppPath(), 'package.json'),
@@ -42,6 +54,16 @@ function resolveForgeDirectory() {
   const home = path.join(os.homedir(), 'Forge');
 
   return fs.existsSync(home) ? home : os.homedir();
+}
+
+// Keep the window icon aligned with the launcher entry. Packaged builds read
+// the extraResource copy; development reads the tracked asset set directly.
+function resolveWindowIcon() {
+  const file = app.isPackaged
+    ? path.join(process.resourcesPath, 'app-icon', 'icon-512.png')
+    : path.join(app.getAppPath(), 'assets', 'app-icon', 'icon-512.png');
+
+  return fs.existsSync(file) ? file : undefined;
 }
 
 const forgePath = resolveForgePath();
@@ -296,7 +318,22 @@ ipcMain.handle('updater:open-downloads', (event) => {
   return openDownloadsFolder();
 });
 
+// Taskbar shortcut. The user-initiated request installs a FreeDesktop entry
+// under ~/.local/share. Forge never edits KDE panel configuration and never
+// reports the application as pinned; pinning stays a user action.
+ipcMain.handle('taskbar:status', (event) => {
+  if (!validSender(event)) return null;
+  return getTaskbarStatus();
+});
+
+ipcMain.handle('taskbar:install', (event) => {
+  if (!validSender(event)) return null;
+  return installTaskbarShortcut();
+});
+
 function createWindow() {
+  const icon = resolveWindowIcon();
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 850,
@@ -304,6 +341,7 @@ function createWindow() {
     minHeight: 480,
     title: 'Forge AI Desktop',
     backgroundColor: '#0b1020',
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -327,7 +365,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  app.setName('Forge AI Desktop');
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

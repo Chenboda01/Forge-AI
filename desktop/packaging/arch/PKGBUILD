@@ -1,0 +1,78 @@
+# Maintainer: Boda Chen <chenboda01@users.noreply.github.com>
+#
+# forge-ai-desktop-bin installs the Forge AI Desktop application tree from the
+# verified 1.1.0 .deb build. The Debian package is produced inside ubuntu:22.04
+# (glibc 2.35) by scripts/build-installers-container.sh, so its binaries are
+# portable across Arch's newer glibc. Repackaging that artifact keeps the Arch
+# package identical to the build covered by the release evidence.
+#
+# The checksum pins the exact artifact recorded in the V1.1.0 evidence
+# snapshot. Rebuilding the .deb changes the checksum, so update it only after
+# re-running the full verification pipeline; scripts/build-arch-package.sh
+# refuses to build when the input does not match.
+
+pkgname=forge-ai-desktop-bin
+pkgver=1.1.0
+pkgrel=1
+pkgdesc='Desktop shell for the Forge AI coding agent'
+arch=('x86_64')
+url='https://github.com/Chenboda01/Forge-AI'
+license=('MIT')
+depends=(
+  'gtk3'
+  'libnotify'
+  'nss'
+  'xdg-utils'
+  'at-spi2-core'
+  'libdrm'
+  'mesa'
+  'libxcb'
+  'libsecret'
+  'libx11'
+  'libxcomposite'
+  'libxdamage'
+  'libxrandr'
+  'libxkbcommon'
+  'alsa-lib'
+  'pango'
+  'cairo'
+  'expat'
+)
+provides=('forge-ai-desktop')
+conflicts=('forge-ai-desktop')
+options=('!strip' '!debug')
+source=("forge-ai-desktop_${pkgver}_amd64.deb")
+sha256sums=('7306aeb85d5778c1278a1b3ec1bbc24e62f5f0a914d770c8054dd5a4d4b4d673')
+
+prepare() {
+  rm -rf extracted
+  mkdir extracted
+  bsdtar -xf "$srcdir/forge-ai-desktop_${pkgver}_amd64.deb" -C extracted
+  bsdtar -xf extracted/data.tar.* -C extracted
+}
+
+package() {
+  install -d \
+    "$pkgdir/opt" \
+    "$pkgdir/usr/bin" \
+    "$pkgdir/usr/share/applications" \
+    "$pkgdir/usr/share/icons" \
+    "$pkgdir/usr/share/licenses/$pkgname"
+
+  cp -a "$srcdir/extracted/usr/lib/forge-ai-desktop" "$pkgdir/opt/"
+  ln -s /opt/forge-ai-desktop/forge-ai-desktop "$pkgdir/usr/bin/forge-ai-desktop"
+
+  # Electron's setuid sandbox helper must stay setuid root; pacman preserves
+  # the mode recorded in the package.
+  chmod 4755 "$pkgdir/opt/forge-ai-desktop/chrome-sandbox"
+
+  install -Dm644 \
+    "$srcdir/extracted/usr/share/applications/forge-ai-desktop.desktop" \
+    "$pkgdir/usr/share/applications/forge-ai-desktop.desktop"
+
+  cp -a "$srcdir/extracted/usr/share/icons/hicolor" "$pkgdir/usr/share/icons/"
+
+  install -Dm644 \
+    "$srcdir/extracted/usr/share/doc/forge-ai-desktop/copyright" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
