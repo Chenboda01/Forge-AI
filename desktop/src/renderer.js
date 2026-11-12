@@ -9,7 +9,33 @@ import {
   SPLASH_TEXT,
   shouldDismissSplash,
 } from './splash-core.mjs';
+import {
+  SPLASH_LOADER_LABEL,
+  glassPerformanceTier,
+  pointerPercent,
+  splashLoaderState,
+} from './glass-core.mjs';
 import './index.css';
+
+function webglRenderer() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl');
+
+    if (!gl) return '';
+
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+
+    return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '';
+  } catch {
+    return '';
+  }
+}
+
+document.documentElement.dataset.glassPerf = glassPerformanceTier({
+  hardwareConcurrency: navigator.hardwareConcurrency,
+  renderer: webglRenderer(),
+});
 
 const api = window.forgeDesktop;
 const updater = api.updater;
@@ -27,12 +53,20 @@ document.querySelector('#app').innerHTML = `
         draggable="false"
       >
       <p class="splash-title">${SPLASH_TEXT}</p>
-      <div class="splash-shimmer" aria-hidden="true"></div>
+      <div
+        id="splash-loader"
+        class="splash-loader"
+        role="progressbar"
+        aria-label="${SPLASH_LOADER_LABEL}"
+        aria-valuetext="Starting"
+      >
+        <div class="splash-loader__fill"></div>
+      </div>
     </div>
   </div>
 
   <div class="app">
-    <header class="header">
+    <header class="header glass-interactive">
       <div class="branding">
         <div class="logo">F</div>
         <div>
@@ -48,18 +82,18 @@ document.querySelector('#app').innerHTML = `
         </button>
         <button
           id="taskbar-button"
-          class="taskbar-button"
+          class="taskbar-button glass-interactive"
           title="Add Forge to your application launcher"
         >
           ⌖ Taskbar
         </button>
-        <button id="restart">↻ Restart</button>
+        <button id="restart" class="glass-interactive">↻ Restart</button>
       </div>
     </header>
 
-    <nav class="tabbar" aria-label="Forge sessions">
+    <nav class="tabbar glass-interactive" aria-label="Forge sessions">
       <div id="tabs" role="tablist"></div>
-      <button id="new-tab">+ New Tab</button>
+      <button id="new-tab" class="glass-interactive">+ New Tab</button>
     </nav>
 
     <main class="workspace">
@@ -263,6 +297,12 @@ document.querySelector('#app').innerHTML = `
   </div>
 `;
 
+for (const element of document.querySelectorAll(
+  '.update-button, .secondary-button, .scarlet-button, .close-glass',
+)) {
+  element.classList.add('glass-interactive');
+}
+
 const splash = $('#splash');
 const splashShownAt = performance.now();
 let terminalReady = false;
@@ -277,6 +317,7 @@ function clearSplashCheckTimers() {
 function finishSplashDismissal() {
   splash.classList.add('hidden');
   splash.setAttribute('aria-hidden', 'true');
+  performance.mark('forge:splash-hidden');
 }
 
 function dismissSplash() {
@@ -309,6 +350,15 @@ function checkSplashDismissal() {
   ) {
     dismissSplash();
   }
+}
+
+function markSplashReady() {
+  const loader = $('#splash-loader');
+
+  if (!loader) return;
+
+  loader.dataset.state = splashLoaderState({ terminalReady: true });
+  loader.setAttribute('aria-valuetext', 'Ready');
 }
 
 const splashMinimumTimer = window.setTimeout(
@@ -367,7 +417,8 @@ function updateTabs() {
 
   for (const session of sessions.values()) {
     const button = document.createElement('button');
-    button.className = 'tab' + (session.id === activeId ? ' active' : '');
+    button.className =
+      'tab glass-interactive' + (session.id === activeId ? ' active' : '');
     button.setAttribute('role', 'tab');
     button.setAttribute('aria-selected', String(session.id === activeId));
 
@@ -536,6 +587,8 @@ async function newTab() {
 
     session.running = true;
     terminalReady = true;
+    performance.mark('forge:terminal-ready');
+    markSplashReady();
     checkSplashDismissal();
     updateTabs();
 
@@ -714,23 +767,43 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
-// Moving liquid reflection.
-function trackGlassPointer(panel) {
-  panel.addEventListener('pointermove', (event) => {
-    const rect = panel.getBoundingClientRect();
+let glassPointerFrame = 0;
+let glassPointerTarget = null;
+let glassPointerX = 0;
+let glassPointerY = 0;
 
-    const x = ((event.clientX - rect.left) / rect.width) * 100;
+document.addEventListener(
+  'pointermove',
+  (event) => {
+    const target = event.target.closest?.('.glass-interactive, .glass-panel');
 
-    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    if (!target) return;
 
-    panel.style.setProperty('--x', `${x}%`);
+    glassPointerTarget = target;
+    glassPointerX = event.clientX;
+    glassPointerY = event.clientY;
 
-    panel.style.setProperty('--y', `${y}%`);
-  });
-}
+    if (glassPointerFrame !== 0) return;
 
-trackGlassPointer($('#glass-panel'));
-trackGlassPointer($('#taskbar-panel'));
+    glassPointerFrame = requestAnimationFrame(() => {
+      glassPointerFrame = 0;
+
+      if (!glassPointerTarget) return;
+
+      const { x, y } = pointerPercent({
+        clientX: glassPointerX,
+        clientY: glassPointerY,
+        rect: glassPointerTarget.getBoundingClientRect(),
+      });
+
+      glassPointerTarget.style.setProperty('--gx', `${x}%`);
+      glassPointerTarget.style.setProperty('--gy', `${y}%`);
+      glassPointerTarget.style.setProperty('--x', `${x}%`);
+      glassPointerTarget.style.setProperty('--y', `${y}%`);
+    });
+  },
+  { passive: true },
+);
 
 // Actual GitHub checking stages.
 const unsubscribeCheck = updater.onCheckProgress(({ percent, message }) => {

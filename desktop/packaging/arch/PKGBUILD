@@ -42,7 +42,7 @@ provides=('forge-ai-desktop')
 conflicts=('forge-ai-desktop')
 options=('!strip' '!debug')
 source=("forge-ai-desktop_${pkgver}_amd64.deb")
-sha256sums=('7306aeb85d5778c1278a1b3ec1bbc24e62f5f0a914d770c8054dd5a4d4b4d673')
+sha256sums=('dc758d24e53863cd28ecef23329423a3cd0d502d4328257c69615d51c8fb1bfe')
 
 prepare() {
   rm -rf extracted
